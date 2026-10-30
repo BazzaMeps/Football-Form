@@ -171,6 +171,10 @@
     .ref-lenient{background:rgba(34,197,94,0.16);border:1px solid rgba(34,197,94,0.30);color:#86efac;}
     .ref-average{background:rgba(148,163,184,0.15);border:1px solid rgba(148,163,184,0.25);color:#cbd5e1;}
     .ref-stats-grid{display:grid;grid-template-columns:repeat(5,1fr);gap:12px;margin-top:12px;}
+    .xc-grid{display:grid;grid-template-columns:1.15fr 1fr;gap:16px;margin-top:16px;}
+    @media(max-width:760px){.xc-grid{grid-template-columns:1fr;}}
+    .xc-h{font-size:12px;font-weight:800;color:var(--muted);text-transform:uppercase;letter-spacing:0.05em;margin-bottom:6px;}
+    .xc-up{color:var(--col-loss);} .xc-down{color:var(--col-win-soft);}
     .ref-stat{background:rgba(255,255,255,0.03);border:1px solid var(--border);border-radius:12px;padding:12px;text-align:center;}
     .ref-stat .label{font-size:11px;text-transform:uppercase;letter-spacing:0.05em;color:var(--muted);margin-bottom:6px;}
     .ref-stat .value{font-size:20px;font-weight:800;}
@@ -1806,6 +1810,28 @@
         </div>
       </div>
 
+      <!-- ── EXPECTED CARDS ── -->
+      <div style="margin-top:18px;" id="xcWrap" class="hidden">
+        <div class="ref-panel">
+          <div class="ref-header">
+            <div>
+              <div class="card-title">&#x1F7E8; Expected cards</div>
+              <div class="card-sub" style="margin-bottom:0;" id="xcSub">Built from how often each club gets booked, and how often their opponents do.</div>
+            </div>
+            <div class="ref-select-wrap">
+              <label for="xcRef" style="margin:0;font-size:13px;">Referee:</label>
+              <select id="xcRef" onchange="xcRender()"></select>
+            </div>
+          </div>
+          <div class="ref-stats-grid" id="xcHeadline"></div>
+          <div class="xc-grid">
+            <div><div class="xc-h">Why these numbers</div><div class="timing-table-wrap"><table class="plh-table" id="xcWhy"></table></div></div>
+            <div><div class="xc-h">Chances</div><div class="timing-table-wrap"><table class="plh-table" id="xcLines"></table></div></div>
+          </div>
+          <div class="plh-note" id="xcNote"></div>
+        </div>
+      </div>
+
       <!-- ── REFEREE HEATMAP ── -->
       <div style="margin-top:18px;" id="refHeatWrap" class="hidden">
         <div class="refheat-panel">
@@ -2474,6 +2500,7 @@ function populateSelectors(){
     renderRefHeatmap();
   }
   else{refPanel.classList.add("hidden");document.getElementById("refHeatWrap").classList.add("hidden");}
+  xcInit();
 }
 
 // ── Stats ─────────────────────────────────────────────────────────────
@@ -3362,14 +3389,18 @@ const REF_MIN_GAMES=10;   // below this the badge says "Too few games" instead o
 const REF_VERDICT_Z=3;    // a verdict needs the raw yellows gap to be this many standard errors from the league
 function refBlend(sum,n,league,K){return(sum+K*league)/(n+K);}
 
+// A row only has real card figures if fouls were recorded too: the CGM merge leaves fouls and cards
+// blank (read as 0) for games Football-Data hasn't published yet. Same rule as the "How often" panel.
+function cardRowsOf(rows){const r=rows.filter(m=>m.homeFouls+m.awayFouls>0);return r.length?r:rows;}
 function getRefereeStats(refName){
   const combined=[...allRows,...histRows];const refMs=combined.filter(r=>r.referee===refName);
   if(!refMs.length||!combined.length)return null;
   const games=refMs.length;
   const sumY=refMs.reduce((a,m)=>a+m.homeYellow+m.awayYellow,0),sumR=refMs.reduce((a,m)=>a+m.homeRed+m.awayRed,0),sumF=refMs.reduce((a,m)=>a+m.homeFouls+m.awayFouls,0);
   const avgY=sumY/games,avgR=sumR/games,avgF=sumF/games;
-  const leagY=combined.reduce((a,m)=>a+m.homeYellow+m.awayYellow,0)/combined.length,leagR=combined.reduce((a,m)=>a+m.homeRed+m.awayRed,0)/combined.length,leagF=combined.reduce((a,m)=>a+m.homeFouls+m.awayFouls,0)/combined.length;
-  const sdY=Math.sqrt(combined.reduce((a,m)=>a+Math.pow(m.homeYellow+m.awayYellow-leagY,2),0)/combined.length);
+  const cr=cardRowsOf(combined);   // league averages from games that actually have cards recorded
+  const leagY=cr.reduce((a,m)=>a+m.homeYellow+m.awayYellow,0)/cr.length,leagR=cr.reduce((a,m)=>a+m.homeRed+m.awayRed,0)/cr.length,leagF=cr.reduce((a,m)=>a+m.homeFouls+m.awayFouls,0)/cr.length;
+  const sdY=Math.sqrt(cr.reduce((a,m)=>a+Math.pow(m.homeYellow+m.awayYellow-leagY,2),0)/cr.length);
   const advY=refBlend(sumY,games,leagY,REF_K.yellows),advR=refBlend(sumR,games,leagR,REF_K.reds),advF=refBlend(sumF,games,leagF,REF_K.fouls);
   return{refName,games,avgY,avgR,avgF,advY,advR,advF,leagY,leagR,leagF,
     wY:games/(games+REF_K.yellows),wR:games/(games+REF_K.reds),wF:games/(games+REF_K.fouls),
@@ -5401,7 +5432,89 @@ function renderDashboard(){
 
   setStatus(`Showing ${homeTeam} vs ${awayTeam} • ${win==="all"?"all matches":`last ${win}`} • ${predModeSelect.value}${unitedBias.checked?" • shameless United bias":""}${hasHist?` • ${histRows.length} historical matches loaded`:""}.`,"good");
 
+  xcRender();
   if(hasRefData){document.getElementById("refHistBadge").classList.toggle("hidden",!hasHist);document.getElementById("refPanelSub").textContent=hasHist?`Card and foul tendencies vs dataset average (current + ${histRows.length} historical matches), adjusted for sample size.`:"Card and foul tendencies vs the dataset average, adjusted for sample size.";renderRefPanel();}
+}
+
+// ── Expected cards ─────────────────────────────────────────────────────
+// Yellows for each side = league baseline for that venue
+//                       × the club's own booking rate (vs league)
+//                       × how often the OPPONENT's opponents get booked (vs league)
+// Both club rates are blended with the league average:  (sum + K·league) / (games + K).
+// Calibrated on the 22-season Premier League history (7,350 games, 2005/06-2025/26), each game
+// predicted only from earlier games that season:
+//  - K = 40 for both rates was best (20-60 all within a whisker).
+//  - The baseline uses the last 120 games, not the whole season: bookings fall through a season
+//    (about 3.55 a game in Sep-Oct, 3.15 in Apr-May), so a season-long average runs high in spring.
+//  - Poisson fits: predicted over 3.5 cards 43.9%, actual 43.6%; over 4.5 25.9% vs 26.1%.
+//  - Games it rated in its top 10% averaged 4.2 yellows; its bottom 10%, 2.7.
+// Referee: the panel's own K=300 blend, so a referee barely moves it (referee yellow rates
+// showed no detectable effect and didn't persist). Reds: league rate only.
+const XC_K=40,XC_RECENT=120,XC_MIN=30;
+function xcInit(){
+  const sel=document.getElementById("xcRef");if(!sel)return;
+  const refs=[...new Set([...allRows,...histRows].map(r=>r.referee).filter(Boolean))].sort();
+  const prev=sel.value;
+  sel.innerHTML='<option value="">Not known</option>'+refs.map(r=>`<option value="${esc(r)}">${esc(r)}</option>`).join("");
+  sel.value=refs.includes(prev)?prev:"";
+  sel.parentElement.style.display=refs.length?"":"none";
+}
+const xcPois=(l,k)=>{let p=Math.exp(-l);for(let i=1;i<=k;i++)p*=l/i;return p;};
+const xcOver=(l,line)=>{let c=0;for(let k=0;k<=Math.floor(line);k++)c+=xcPois(l,k);return Math.max(0,1-c);};
+function xcModel(home,away){
+  const rows=allRows.filter(m=>m.homeFouls+m.awayFouls>0);
+  if(rows.length<XC_MIN)return{error:`Needs at least ${XC_MIN} games with cards recorded in the current-season file (${rows.length} so far).`};
+  const recent=rows.slice(-XC_RECENT),mean=(a,f)=>a.reduce((x,m)=>x+f(m),0)/a.length;
+  const lh=mean(recent,m=>m.homeYellow),la=mean(recent,m=>m.awayYellow),lr=mean(recent,m=>m.homeRed+m.awayRed);
+  const LT=mean(rows,m=>m.homeYellow+m.awayYellow)/2;   // one side's yellows per game, whole file
+  const club=t=>{let o=0,p=0,n=0;rows.forEach(m=>{if(m.homeTeam===t){o+=m.homeYellow;p+=m.awayYellow;n++;}else if(m.awayTeam===t){o+=m.awayYellow;p+=m.homeYellow;n++;}});
+    return{n,own:n?o/n:null,prov:n?p/n:null,fOwn:(o+XC_K*LT)/(n+XC_K)/LT,fProv:(p+XC_K*LT)/(n+XC_K)/LT};};
+  const H=club(home),A=club(away);
+  let rf=1,rfR=1,rs=null;const ref=document.getElementById("xcRef").value;
+  if(ref){rs=getRefereeStats(ref);if(rs){rf=rs.leagY?rs.advY/rs.leagY:1;rfR=rs.leagR?rs.advR/rs.leagR:1;}}
+  const eH=lh*H.fOwn*A.fProv*rf,eA=la*A.fOwn*H.fProv*rf,eR=lr*rfR;
+  return{rows,recent,lh,la,lr,LT,H,A,rf,rs,ref,eH,eA,eR,eY:eH+eA,eC:eH+eA+eR};
+}
+function xcRender(){
+  const wrap=document.getElementById("xcWrap");if(!wrap)return;
+  const home=homeTeamSelect.value,away=awayTeamSelect.value;
+  if(!allRows.length||!home||!away||home===away){wrap.classList.add("hidden");return;}
+  wrap.classList.remove("hidden");
+  const M=xcModel(home,away),hd=document.getElementById("xcHeadline");
+  if(M.error){hd.innerHTML=`<div class="plh-ex" style="grid-column:1/-1;">${esc(M.error)}</div>`;["xcWhy","xcLines"].forEach(id=>document.getElementById(id).innerHTML="");document.getElementById("xcNote").textContent="";return;}
+  const pct=p=>(100*p).toFixed(0)+"%",odds=p=>p>0.005?(1/p).toFixed(2):"–";
+  const vs=(v,base)=>{const d=100*(v/base-1);return Math.abs(d)<3?'<span style="color:var(--col-neutral)">≈ avg</span>':`<span class="${d>0?"xc-up":"xc-down"}">${d>0?"▲":"▼"} ${Math.abs(d).toFixed(0)}% vs avg</span>`;};
+  const pHomeMore=(()=>{let p=0;for(let i=1;i<=12;i++)for(let j=0;j<i;j++)p+=xcPois(M.eH,i)*xcPois(M.eA,j);return p;})();
+  const pLevel=(()=>{let p=0;for(let i=0;i<=12;i++)p+=xcPois(M.eH,i)*xcPois(M.eA,i);return p;})();
+  hd.innerHTML=[
+    [esc(home),M.eH.toFixed(2),vs(M.eH,M.lh)+'<div class="vs-avg" style="color:var(--muted);">yellows · home avg '+M.lh.toFixed(2)+'</div>'],
+    [esc(away),M.eA.toFixed(2),vs(M.eA,M.la)+'<div class="vs-avg" style="color:var(--muted);">yellows · away avg '+M.la.toFixed(2)+'</div>'],
+    ["Total yellows",M.eY.toFixed(2),vs(M.eY,M.lh+M.la)],
+    ["Reds",M.eR.toFixed(2),'<div class="vs-avg" style="color:var(--muted);">league rate'+(M.ref?" · ref-adjusted":"")+'</div>'],
+    ["Total cards",M.eC.toFixed(2),'<div class="vs-avg" style="color:var(--muted);">yellows + reds</div>']
+  ].map(([l,v,sub])=>`<div class="ref-stat"><div class="label">${l}</div><div class="value">${v}</div><div class="vs-avg">${sub}</div></div>`).join("");
+  const n2=x=>x===null?"–":x.toFixed(2),mult=f=>`<span class="${f>1.03?"xc-up":f<0.97?"xc-down":""}">×${f.toFixed(2)}</span>`;
+  document.getElementById("xcWhy").innerHTML=`<thead><tr><th style="text-align:left;">Per game</th><th>${esc(home)}</th><th>${esc(away)}</th></tr></thead><tbody>
+    <tr><td class="t">Games with cards</td><td>${M.H.n}</td><td>${M.A.n}</td></tr>
+    <tr><td class="t">Own yellows (raw)</td><td>${n2(M.H.own)}</td><td>${n2(M.A.own)}</td></tr>
+    <tr><td class="t">&nbsp;&nbsp;→ factor after blending</td><td>${mult(M.H.fOwn)}</td><td>${mult(M.A.fOwn)}</td></tr>
+    <tr><td class="t">Opponents' yellows (raw)</td><td>${n2(M.H.prov)}</td><td>${n2(M.A.prov)}</td></tr>
+    <tr><td class="t">&nbsp;&nbsp;→ factor after blending</td><td>${mult(M.H.fProv)}</td><td>${mult(M.A.fProv)}</td></tr>
+    <tr><td class="t">Referee</td><td colspan="2">${M.ref?esc(M.ref)+" "+mult(M.rf)+(M.rs?` <span style="color:var(--muted);font-size:11px;">(${M.rs.games} games)</span>`:""):'<span style="color:var(--muted);">not set ×1.00</span>'}</td></tr>
+    </tbody>`;
+  const row=(label,l,line)=>{const o=xcOver(l,line);return`<tr><td class="t">${label}</td><td>${pct(o)} <span style="color:var(--muted);font-size:11px;">${odds(o)}</span></td><td>${pct(1-o)} <span style="color:var(--muted);font-size:11px;">${odds(1-o)}</span></td></tr>`;};
+  document.getElementById("xcLines").innerHTML=`<thead><tr><th style="text-align:left;">Line</th><th>Over <span class="plh-sub">fair odds</span></th><th>Under</th></tr></thead><tbody>
+    ${[2.5,3.5,4.5,5.5].map(l=>row("Total cards "+l,M.eC,l)).join("")}
+    ${[0.5,1.5,2.5].map(l=>row(esc(home)+" yellows "+l,M.eH,l)).join("")}
+    ${[0.5,1.5,2.5].map(l=>row(esc(away)+" yellows "+l,M.eA,l)).join("")}
+    <tr><td class="t">More yellows</td><td colspan="2">${esc(home)} ${pct(pHomeMore)} · level ${pct(pLevel)} · ${esc(away)} ${pct(1-pHomeMore-pLevel)}</td></tr>
+    </tbody>`;
+  const skipped=allRows.length-M.rows.length;
+  document.getElementById("xcSub").textContent=`From ${M.rows.length} games with cards recorded in your current-season file; league baseline from the last ${M.recent.length}.`;
+  document.getElementById("xcNote").innerHTML=`Each club figure is blended with the league average as if it had 40 extra average games, so a few wild games can't swing it. `+
+    `Tested on 22 Premier League seasons (7,350 games, each predicted only from earlier games that season): it said over 3.5 cards 43.9% of the time and it happened 43.6%; games it rated highest averaged 4.2 yellows, lowest 2.7. `+
+    `Club differences are real but modest: most of the game-to-game swing is luck. Reds count as one card each here; the referee barely moves it, as referee booking rates haven't been shown to persist.`+
+    (skipped?` ${skipped} game${skipped===1?"":"s"} in the file had no cards recorded and ${skipped===1?"was":"were"} left out.`:"");
 }
 
 // ── Run-in tab helper ─────────────────────────────────────────────────
@@ -7394,9 +7507,10 @@ function renderRefHeatmap(){
   const selectedRef = refSelect?.value || "";
 
   // League averages
-  const leagY = combined.reduce((a,m)=>a+m.homeYellow+m.awayYellow,0)/combined.length;
-  const leagR = combined.reduce((a,m)=>a+m.homeRed+m.awayRed,0)/combined.length;
-  const leagF = combined.reduce((a,m)=>a+m.homeFouls+m.awayFouls,0)/combined.length;
+  const cr = cardRowsOf(combined);
+  const leagY = cr.reduce((a,m)=>a+m.homeYellow+m.awayYellow,0)/cr.length;
+  const leagR = cr.reduce((a,m)=>a+m.homeRed+m.awayRed,0)/cr.length;
+  const leagF = cr.reduce((a,m)=>a+m.homeFouls+m.awayFouls,0)/cr.length;
   const leagHW = combined.filter(m=>m.homeGoals>m.awayGoals).length/combined.length;
   const leagBTTS = combined.filter(m=>m.homeGoals>0&&m.awayGoals>0).length/combined.length;
   const leagO25 = combined.filter(m=>(m.homeGoals+m.awayGoals)>2).length/combined.length;
