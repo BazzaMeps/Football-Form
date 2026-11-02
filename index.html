@@ -171,6 +171,17 @@
     .ref-lenient{background:rgba(34,197,94,0.16);border:1px solid rgba(34,197,94,0.30);color:#86efac;}
     .ref-average{background:rgba(148,163,184,0.15);border:1px solid rgba(148,163,184,0.25);color:#cbd5e1;}
     .ref-stats-grid{display:grid;grid-template-columns:repeat(5,1fr);gap:12px;margin-top:12px;}
+    .fx-row{display:flex;gap:8px;flex-wrap:wrap;align-items:center;}
+    .fx-sel{width:auto;min-width:150px;padding:8px 10px;font-size:13px;border-radius:8px;}
+    .fx-custom{flex:1;min-width:200px;padding:8px 10px;font-size:13px;background:rgba(255,255,255,0.05);border:1px solid var(--border);border-radius:8px;color:var(--text);}
+    .fx-btn{padding:8px 14px;font-size:13px;background:rgba(74,222,128,0.15);border:1px solid rgba(74,222,128,0.3);border-radius:8px;color:#86efac;cursor:pointer;font-weight:700;}
+    .fx-btn-quiet{background:transparent;color:var(--muted);border-color:var(--border);}
+    body.light .fx-btn{color:#15803d;}
+    .fx-keyline{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-top:6px;font-size:12px;color:var(--muted);}
+    .fx-link{background:none;border:none;padding:0;color:var(--muted);font-size:12px;cursor:pointer;text-decoration:underline;}
+    .fx-keywrap{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-top:8px;}
+    .fx-keyhelp{flex-basis:100%;font-size:11px;color:var(--muted);}
+    .fx-keywrap.hidden,.fx-custom.hidden,.fx-sel.hidden{display:none;}
     .xc-grid{display:grid;grid-template-columns:1.15fr 1fr;gap:16px;margin-top:16px;}
     @media(max-width:760px){.xc-grid{grid-template-columns:1fr;}}
     .xc-h{font-size:12px;font-weight:800;color:var(--muted);text-transform:uppercase;letter-spacing:0.05em;margin-bottom:6px;}
@@ -733,6 +744,10 @@
     .plh-era-legend i{display:inline-block;width:14px;height:3px;border-radius:2px;vertical-align:middle;margin-right:5px;}
     .plh-era-legend i.dash{background:none!important;border-top:2px dashed;height:0;}
     .plh-era-chart svg{width:100%;height:auto;display:block;}
+    .bt-prog{height:6px;border-radius:999px;background:var(--chart-grid);overflow:hidden;margin:10px 0;}
+    .bt-prog.hidden{display:none;}
+    .bt-prog>div{height:100%;width:0;background:var(--accent);transition:width .15s;}
+    .bt-good{color:var(--col-win);} .bt-bad{color:var(--col-loss);}
     .plh-combo-box{background:rgba(255,255,255,0.03);border:1px solid var(--border);border-radius:12px;padding:12px 14px;margin-top:12px;}
     .plh-combo-big{font-size:22px;font-weight:800;line-height:1.25;}
     .plh-ex{font-size:12px;color:var(--muted);margin-top:4px;line-height:1.5;}
@@ -1011,13 +1026,29 @@
         </div>
         <input id="fixtureFileInput" type="file" accept=".csv" style="padding:8px 12px;font-size:14px;" />
         <div style="margin-top:10px;padding-top:10px;border-top:1px solid rgba(74,222,128,0.15);">
-          <div style="font-size:12px;color:var(--muted);margin-bottom:6px;">Or load live from a fixturedownload.com feed (swap the league/season slug at the end for other competitions, e.g. ...epl-2026 vs ...championship-2026):</div>
-          <div style="display:flex;gap:8px;flex-wrap:wrap;">
-            <input id="fixtureUrlInput" type="text" value="https://fixturedownload.com/feed/json/epl-2026" style="flex:1;min-width:220px;padding:8px 10px;font-size:13px;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.15);border-radius:6px;color:#fff;" />
-            <button id="fixtureUrlBtn" onclick="loadFixturesFromUrl()" style="padding:8px 14px;font-size:13px;background:rgba(74,222,128,0.15);border:1px solid rgba(74,222,128,0.3);border-radius:6px;color:#86efac;cursor:pointer;">Load fixtures 🌐</button>
+          <div style="font-size:12px;color:var(--muted);margin-bottom:6px;">Or load live from fixturedownload.com:</div>
+          <div class="fx-row">
+            <select id="fxLeague" class="fx-sel" onchange="fxLeagueChange()" aria-label="League">
+              <option value="epl">Premier League</option>
+              <option value="championship">Championship</option>
+              <option value="custom">Other feed…</option>
+            </select>
+            <select id="fxSeason" class="fx-sel" aria-label="Season"></select>
+            <input id="fixtureUrlInput" class="fx-custom hidden" type="text" placeholder="feed name (e.g. league-one-2026) or full feed address" aria-label="Other feed" />
+            <button id="fixtureUrlBtn" class="fx-btn" onclick="loadFixturesFromUrl()">Load fixtures 🌐</button>
+          </div>
+          <div class="fx-keyline">
+            <span id="fxKeyState"></span>
+            <button type="button" class="fx-link" onclick="fxToggleKey()" id="fxKeyToggle">🔑 Proxy key</button>
+          </div>
+          <div id="fxKeyWrap" class="fx-keywrap hidden">
+            <input id="fxKeyInput" type="password" class="fx-custom" placeholder="corsproxy.io key" autocomplete="off" aria-label="corsproxy.io key" />
+            <button type="button" class="fx-btn" onclick="fxSaveKey()">Save</button>
+            <button type="button" class="fx-btn fx-btn-quiet" onclick="fxClearKey()">Remove</button>
+            <div class="fx-keyhelp">Saved in this browser only, never in the app file, so it stays out of your public GitHub repo. Enter it once on each device.</div>
           </div>
           <div id="fixtureUrlPasteWrap" class="hidden" style="margin-top:8px;">
-            <div style="font-size:12px;color:var(--warn,#fca5a5);margin-bottom:6px;">Direct fetch didn't work (likely blocked by the browser) — paste the feed's JSON below instead. Open the URL above in a new tab, Ctrl+A → Ctrl+C the page, paste here:</div>
+            <div style="font-size:12px;color:var(--warn,#fca5a5);margin-bottom:6px;">Couldn't fetch it (browsers usually block this site without a proxy key). Open <a id="fxPasteLink" href="#" target="_blank" rel="noopener" style="color:#86efac;">the feed</a> in a new tab, Ctrl+A → Ctrl+C the page, and paste it here:</div>
             <textarea id="fixtureUrlPasteBox" rows="4" style="width:100%;font-family:monospace;font-size:12px;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.15);border-radius:6px;color:#fff;padding:8px;"></textarea>
             <button onclick="loadFixturesFromPastedJson()" style="margin-top:6px;padding:8px 14px;font-size:13px;background:rgba(74,222,128,0.15);border:1px solid rgba(74,222,128,0.3);border-radius:6px;color:#86efac;cursor:pointer;">Parse pasted JSON</button>
           </div>
@@ -1832,6 +1863,24 @@
         </div>
       </div>
 
+      <!-- ── EXPECTED CORNERS ── -->
+      <div style="margin-top:18px;" id="xkWrap" class="hidden">
+        <div class="ref-panel">
+          <div class="ref-header">
+            <div>
+              <div class="card-title">&#x26F3; Expected corners</div>
+              <div class="card-sub" style="margin-bottom:0;" id="xkSub">Built from how many corners each club wins, and how many it gives away.</div>
+            </div>
+          </div>
+          <div class="ref-stats-grid" id="xkHeadline"></div>
+          <div class="xc-grid">
+            <div><div class="xc-h">Why these numbers</div><div class="timing-table-wrap"><table class="plh-table" id="xkWhy"></table></div></div>
+            <div><div class="xc-h">Chances</div><div class="timing-table-wrap"><table class="plh-table" id="xkLines"></table></div></div>
+          </div>
+          <div class="plh-note" id="xkNote"></div>
+        </div>
+      </div>
+
       <!-- ── REFEREE HEATMAP ── -->
       <div style="margin-top:18px;" id="refHeatWrap" class="hidden">
         <div class="refheat-panel">
@@ -2138,6 +2187,45 @@
               <div class="timing-table-wrap"><table class="plh-table"><thead id="plhEraHead"></thead><tbody id="plhEraBody"></tbody></table></div>
             </details>
             <div class="plh-note" id="plhEraNote"></div>
+          </div>
+
+          <div class="first-goal-panel" style="margin-top:18px;" id="btPanel">
+            <div class="card-title">&#x1F9EA; Model check</div>
+            <div class="card-sub">Replays all 22 seasons through the Analysis tab&rsquo;s own prediction model. Every game is predicted using only the games before it that season, then scored against what happened and against the bookmakers&rsquo; odds in your history file.</div>
+            <div class="plh-controls">
+              <label for="btMode">Model:</label><select id="btMode"></select>
+              <label for="btMin">Start once each side has played</label>
+              <select id="btMin"><option value="1">1 game</option><option value="3" selected>3 games</option><option value="6">6 games</option><option value="10">10 games</option></select>
+              <span style="font-size:12px;color:var(--muted);">at that venue</span>
+              <button class="plh-mini-btn" id="btRunBtn" onclick="btGo()">&#x25B6; Run check</button>
+              <button class="plh-mini-btn" id="btAllBtn" onclick="btCompareAll()">Compare all 6 models</button>
+            </div>
+            <div class="bt-prog hidden" id="btProg"><div id="btProgBar"></div></div>
+            <div id="btOut" class="hidden">
+              <div class="xc-h" style="margin-top:6px;">Before and after the v21 fix</div>
+              <div class="timing-table-wrap"><table class="plh-table" id="btBA"></table></div>
+              <div class="xc-h" style="margin-top:16px;">The current model in detail</div>
+              <div class="plh-stats" id="btStats"></div>
+              <div class="plh-combo-box" id="btVerdict"></div>
+              <div class="xc-grid" style="grid-template-columns:1.2fr 1fr;">
+                <div>
+                  <div class="xc-h" style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">When it said&hellip; it happened&hellip;
+                    <select id="btMarket" onchange="btRenderCal()" style="width:auto;padding:4px 8px;font-size:12px;text-transform:none;letter-spacing:0;">
+                      <option value="res">Match result (H/D/A)</option><option value="o25">Over 2.5 goals</option><option value="btts">Both teams score</option></select></div>
+                  <div class="plh-era-chart" id="btCal"></div>
+                </div>
+                <div>
+                  <div class="xc-h">How it does through the season</div>
+                  <div class="timing-table-wrap"><table class="plh-table" id="btStage"></table></div>
+                  <div class="xc-h" style="margin-top:14px;display:flex;gap:8px;align-items:center;flex-wrap:wrap;">Backing its &ldquo;value&rdquo; picks
+                    <select id="btEdge" onchange="btRenderValue()" style="width:auto;padding:4px 8px;font-size:12px;text-transform:none;letter-spacing:0;">
+                      <option value="0.05">edge 5%+</option><option value="0.1">edge 10%+</option><option value="0.2">edge 20%+</option></select></div>
+                  <div class="timing-table-wrap"><table class="plh-table" id="btValue"></table></div>
+                </div>
+              </div>
+              <div id="btAll"></div>
+              <div class="plh-note" id="btNote"></div>
+            </div>
           </div>
 
           <div class="first-goal-panel" style="margin-top:18px;">
@@ -2521,7 +2609,7 @@ function getTeamVenueStats(rows,team,venue,win,weighted=false,decay=false){
   if(decay)weights=calcDecayWeights(played);
   else weights=ms.map((_,i)=>weighted?i+1:1);
   const gf=ms.map(m=>isHome?m.homeGoals:m.awayGoals),ga=ms.map(m=>isHome?m.awayGoals:m.homeGoals);
-  const sh=ms.map(m=>isHome?m.homeShots:m.awayShots),st=ms.map(m=>isHome?m.homeSOT:m.awaySOT);
+  const sh=ms.map(m=>isHome?m.homeShots:m.awayShots),st=ms.map(m=>isHome?m.homeSOT:m.awaySOT),stA=ms.map(m=>isHome?m.awaySOT:m.homeSOT);
   const co=ms.map(m=>isHome?m.homeCorners:m.awayCorners),ye=ms.map(m=>isHome?m.homeYellow:m.awayYellow);
   const wins=ms.filter(m=>isHome?m.homeGoals>m.awayGoals:m.awayGoals>m.homeGoals).length;
   const draws=ms.filter(m=>m.homeGoals===m.awayGoals).length,losses=played-wins-draws;
@@ -2530,10 +2618,12 @@ function getTeamVenueStats(rows,team,venue,win,weighted=false,decay=false){
   const cs=ms.filter(m=>isHome?m.awayGoals===0:m.homeGoals===0).length;
   const bttsC=ms.filter(m=>m.homeGoals>0&&m.awayGoals>0).length;
   const scoredC=ms.filter(m=>isHome?m.homeGoals>0:m.awayGoals>0).length;
-  return{team,venue,played,wins,draws,losses,goalsFor,goalsAgainst,shots:sum(sh),sot:sum(st),cornersWon:sum(co),yellow:sum(ye),
+  // effective sample size: weighted/decay modes lean on fewer games than they count
+  const effN=played?((decay||weighted)?Math.pow(sum(weights),2)/sum(weights.map(w=>w*w)):played):0;
+  return{team,venue,played,effN,wins,draws,losses,goalsFor,goalsAgainst,shots:sum(sh),sot:sum(st),cornersWon:sum(co),yellow:sum(ye),
     winPct:played?wins/played*100:0,drawPct:played?draws/played*100:0,lossPct:played?losses/played*100:0,
     avgGoalsFor:avg(gf),avgGoalsAgainst:avg(ga),avgTotalGoals:avg(gf.map((v,i)=>v+ga[i])),
-    avgShots:avg(sh),avgSOT:avg(st),avgCornersWon:avg(co),avgYellow:avg(ye),
+    avgShots:avg(sh),avgSOT:avg(st),avgSOTAgainst:avg(stA),avgCornersWon:avg(co),avgYellow:avg(ye),
     cleanSheets:cs,cleanSheetPct:played?cs/played*100:0,bttsPct:played?bttsC/played*100:0,scoredPct:played?scoredC/played*100:0,
     trend:getFormTrend(ms,isHome),
     recentForm:ms.slice(-5).map(m=>{const f=isHome?m.homeGoals:m.awayGoals,a2=isHome?m.awayGoals:m.homeGoals;return f>a2?"W":f<a2?"L":"D";}).join(" ")};
@@ -3311,21 +3401,44 @@ function applyUnitedBias(ht,at,lh,la,inMonteCarlo=false){
 // ── xG model helpers (upgraded — SOT-weighted) ────────────────────────
 // Blends raw goals-based lambda with a shots-on-target conversion rate
 // to give a more accurate expected goals figure than goals alone.
+// ── Model settings (v21) ──────────────────────────────────────────────
+// Two changes, both chosen by replaying 22 Premier League seasons in the History tab's Model check
+// (each game predicted only from earlier games that season):
+// 1. Sample-size blending. Every team strength is blended with the league average as if it had
+//    K extra average games:  strength = (games × own + K) / (games + K).  Unblended, three early
+//    wins made a team look like world-beaters: the model said 94% and it happened 72%, and it did
+//    worse than just guessing the league's home/draw/away split until teams had 6+ games at the venue.
+// 2. The shots-on-target half now uses how many shots on target a team gets, and how many its
+//    opponent concedes, instead of goals-per-shot-on-target. Conversion rates are mostly luck, and
+//    the old version divided the opponent's goals conceded by its OWN shots on target.
+// Result (from each team's 3rd game at the venue): chance given to the actual result 33.6% -> 37.2%;
+// league-split guess 34.5%; bookmakers 38.4%.
+const MODEL_PRESETS={
+  current:{K:3,sotW:0.5,sot:"volume",label:"Current (v21)"},
+  v20:{K:0,sotW:0.4,sot:"conv",label:"Before the fix (v20)"}
+};
+let MODEL_SET=MODEL_PRESETS.current;
+const modelBlend=(x,n)=>MODEL_SET.K>0?((n||0)*x+MODEL_SET.K)/((n||0)+MODEL_SET.K):x;
 function calcXgLambda(teamVenueStats,leagueAvg,venueGoalsAvg,venueGoalsAgainst,oppDefStats){
   if(!teamVenueStats.played)return venueGoalsAvg||1.2;
-  // Base: standard Dixon-Lee attack/defence ratio model
-  const attStrength=venueGoalsAvg?teamVenueStats.avgGoalsFor/venueGoalsAvg:1;
-  const defStrength=venueGoalsAvg?oppDefStats.avgGoalsAgainst/venueGoalsAvg:1;
+  const nT=teamVenueStats.effN??teamVenueStats.played,nO=oppDefStats.effN??oppDefStats.played;
+  // Goals: attack x defence ratio model, each strength blended toward average
+  const attStrength=modelBlend(venueGoalsAvg?teamVenueStats.avgGoalsFor/venueGoalsAvg:1,nT);
+  const defStrength=modelBlend(venueGoalsAvg?oppDefStats.avgGoalsAgainst/venueGoalsAvg:1,nO);
   const baseLambda=attStrength*defStrength*venueGoalsAvg;
-  // SOT correction: if SOT data available, blend in a conversion-rate signal
-  // SOT conversion = goals / SOT. Blend 60% goals-model, 40% SOT-model.
+  // Shots on target: same idea with SOT for and SOT conceded, then mixed with the goals model
   if(teamVenueStats.avgSOT>0&&leagueAvg.homeSOT>0&&leagueAvg.awaySOT>0){
     const leagSOT=venueGoalsAvg===leagueAvg.homeGoals?leagueAvg.homeSOT:leagueAvg.awaySOT;
-    const leagConvRate=leagSOT>0?venueGoalsAvg/leagSOT:0.3;
-    const teamConvRate=teamVenueStats.avgSOT>0?teamVenueStats.avgGoalsFor/teamVenueStats.avgSOT:leagConvRate;
-    const oppConvRateAgainst=oppDefStats.avgSOT>0?oppDefStats.avgGoalsAgainst/oppDefStats.avgSOT:leagConvRate;
-    const sotLambda=(teamConvRate/leagConvRate)*(oppConvRateAgainst/leagConvRate)*venueGoalsAvg;
-    return baseLambda*0.6+sotLambda*0.4;
+    let sotLambda;
+    if(MODEL_SET.sot==="volume"){
+      sotLambda=modelBlend(teamVenueStats.avgSOT/leagSOT,nT)*modelBlend((oppDefStats.avgSOTAgainst||leagSOT)/leagSOT,nO)*venueGoalsAvg;
+    }else{   // v20 conversion-rate version, kept only so the Model check can show before/after
+      const leagConvRate=leagSOT>0?venueGoalsAvg/leagSOT:0.3;
+      const teamConvRate=teamVenueStats.avgSOT>0?teamVenueStats.avgGoalsFor/teamVenueStats.avgSOT:leagConvRate;
+      const oppConvRateAgainst=oppDefStats.avgSOT>0?oppDefStats.avgGoalsAgainst/oppDefStats.avgSOT:leagConvRate;
+      sotLambda=(teamConvRate/leagConvRate)*(oppConvRateAgainst/leagConvRate)*venueGoalsAvg;
+    }
+    return baseLambda*(1-MODEL_SET.sotW)+sotLambda*MODEL_SET.sotW;
   }
   return baseLambda;
 }
@@ -5433,6 +5546,7 @@ function renderDashboard(){
   setStatus(`Showing ${homeTeam} vs ${awayTeam} • ${win==="all"?"all matches":`last ${win}`} • ${predModeSelect.value}${unitedBias.checked?" • shameless United bias":""}${hasHist?` • ${histRows.length} historical matches loaded`:""}.`,"good");
 
   xcRender();
+  xkRender();
   if(hasRefData){document.getElementById("refHistBadge").classList.toggle("hidden",!hasHist);document.getElementById("refPanelSub").textContent=hasHist?`Card and foul tendencies vs dataset average (current + ${histRows.length} historical matches), adjusted for sample size.`:"Card and foul tendencies vs the dataset average, adjusted for sample size.";renderRefPanel();}
 }
 
@@ -5517,6 +5631,80 @@ function xcRender(){
     (skipped?` ${skipped} game${skipped===1?"":"s"} in the file had no cards recorded and ${skipped===1?"was":"were"} left out.`:"");
 }
 
+// ── Expected corners ───────────────────────────────────────────────────
+// Each side's corners = league baseline for that venue × the club's corners-won rate × the opponent's
+// corners-conceded rate (both vs league, blended as if each club had XK_K extra average games).
+// Total corners comes from a separate, more heavily blended "corners in their games" rate, and the
+// two sides are scaled to add up to it.
+// Calibrated on 22 Premier League seasons (8,359 games, each predicted from earlier games that season):
+//  - Club figures cut the error on each side's corner count by about 10% (home 9.67 -> 8.62, away
+//    7.74 -> 6.99, mean squared error). Who wins the corner count is well calibrated: games it rated
+//    77% for the home side, the home side had more corners 77% of the time; at 32%, 34%.
+//  - For TOTAL corners they help only about 1%: strong sides win corners and stop the other side
+//    winning them, so totals sit near the league average whatever the matchup.
+//  - Corners are more spread out than a Poisson curve allows (variance ≈ 1.45× the mean per side),
+//    so chances use a negative binomial: size 12 per side, 60 for the total. Both checked against
+//    actual over/under rates.
+//  - Baseline from the last 250 games did best (corner rates drift less within a season than cards).
+const XK_K=10,XK_KT=40,XK_RECENT=250,XK_MIN=30,XK_R_SIDE=12,XK_R_TOT=60;
+function xkNB(mu,r,kmax=40){const q=mu/(r+mu),out=[Math.pow(r/(r+mu),r)];for(let k=1;k<=kmax;k++)out.push(out[k-1]*(k-1+r)/k*q);return out;}
+const xkOver=(pmf,line)=>{let c=0;for(let k=0;k<=Math.floor(line);k++)c+=pmf[k];return Math.max(0,1-c);};
+function xkModel(home,away){
+  const rows=allRows.filter(m=>m.homeCorners+m.awayCorners>0);
+  if(rows.length<XK_MIN)return{error:`Needs at least ${XK_MIN} games with corners recorded in the current-season file (${rows.length} so far).`};
+  const recent=rows.slice(-XK_RECENT),mean=(a,f)=>a.reduce((x,m)=>x+f(m),0)/a.length;
+  const lh=mean(recent,m=>m.homeCorners),la=mean(recent,m=>m.awayCorners);
+  const LT=mean(rows,m=>m.homeCorners+m.awayCorners)/2;
+  const club=t=>{let w=0,c=0,n=0;rows.forEach(m=>{if(m.homeTeam===t){w+=m.homeCorners;c+=m.awayCorners;n++;}else if(m.awayTeam===t){w+=m.awayCorners;c+=m.homeCorners;n++;}});
+    return{n,won:n?w/n:null,con:n?c/n:null,fWon:(w+XK_K*LT)/(n+XK_K)/LT,fCon:(c+XK_K*LT)/(n+XK_K)/LT,fTot:(w+c+XK_KT*2*LT)/(n+XK_KT)/(2*LT),tot:n?(w+c)/n:null};};
+  const H=club(home),A=club(away);
+  const sh=lh*H.fWon*A.fCon,sa=la*A.fWon*H.fCon,T=(lh+la)*H.fTot*A.fTot;
+  const eH=T*sh/(sh+sa),eA=T*sa/(sh+sa);
+  const pH=xkNB(eH,XK_R_SIDE),pA=xkNB(eA,XK_R_SIDE),pT=xkNB(T,XK_R_TOT,60);
+  let more=0,level=0;for(let i=0;i<pH.length;i++){level+=pH[i]*pA[i];for(let j=0;j<i&&j<pA.length;j++)more+=pH[i]*pA[j];}
+  return{rows,recent,lh,la,LT,H,A,eH,eA,T,pH,pA,pT,more,level,less:Math.max(0,1-more-level)};
+}
+function xkRender(){
+  const wrap=document.getElementById("xkWrap");if(!wrap)return;
+  const home=homeTeamSelect.value,away=awayTeamSelect.value;
+  if(!allRows.length||!home||!away||home===away){wrap.classList.add("hidden");return;}
+  wrap.classList.remove("hidden");
+  const M=xkModel(home,away),hd=document.getElementById("xkHeadline");
+  if(M.error){hd.innerHTML=`<div class="plh-ex" style="grid-column:1/-1;">${esc(M.error)}</div>`;["xkWhy","xkLines"].forEach(id=>document.getElementById(id).innerHTML="");document.getElementById("xkNote").textContent="";return;}
+  const pct=p=>(100*p).toFixed(0)+"%",odds=p=>p>0.005?(1/p).toFixed(2):"–";
+  const vs=(v,base)=>{const d=100*(v/base-1);return Math.abs(d)<3?'<span style="color:var(--col-neutral)">≈ avg</span>':`<span>${d>0?"▲":"▼"} ${Math.abs(d).toFixed(0)}% vs avg</span>`;};
+  hd.innerHTML=[
+    [esc(home),M.eH.toFixed(1),vs(M.eH,M.lh)+'<div class="vs-avg" style="color:var(--muted);">home avg '+M.lh.toFixed(1)+'</div>'],
+    [esc(away),M.eA.toFixed(1),vs(M.eA,M.la)+'<div class="vs-avg" style="color:var(--muted);">away avg '+M.la.toFixed(1)+'</div>'],
+    ["Total",M.T.toFixed(1),vs(M.T,M.lh+M.la)],
+    ["More corners",`<span style="font-size:15px;">${pct(M.more)} · ${pct(M.level)} · ${pct(M.less)}</span>`,'<div class="vs-avg" style="color:var(--muted);">home · level · away</div>']
+  ].map(([l,v,sub])=>`<div class="ref-stat"><div class="label">${l}</div><div class="value">${v}</div><div class="vs-avg">${sub}</div></div>`).join("");
+  const n1=x=>x===null?"–":x.toFixed(1),mult=f=>`<span style="${Math.abs(f-1)>0.03?"font-weight:800;":"color:var(--muted);"}">×${f.toFixed(2)}</span>`;
+  document.getElementById("xkWhy").innerHTML=`<thead><tr><th style="text-align:left;">Per game</th><th>${esc(home)}</th><th>${esc(away)}</th></tr></thead><tbody>
+    <tr><td class="t">Games with corners</td><td>${M.H.n}</td><td>${M.A.n}</td></tr>
+    <tr><td class="t">Corners won (raw)</td><td>${n1(M.H.won)}</td><td>${n1(M.A.won)}</td></tr>
+    <tr><td class="t">&nbsp;&nbsp;→ factor after blending</td><td>${mult(M.H.fWon)}</td><td>${mult(M.A.fWon)}</td></tr>
+    <tr><td class="t">Corners given away (raw)</td><td>${n1(M.H.con)}</td><td>${n1(M.A.con)}</td></tr>
+    <tr><td class="t">&nbsp;&nbsp;→ factor after blending</td><td>${mult(M.H.fCon)}</td><td>${mult(M.A.fCon)}</td></tr>
+    <tr><td class="t">Total in their games (raw)</td><td>${n1(M.H.tot)}</td><td>${n1(M.A.tot)}</td></tr>
+    <tr><td class="t">&nbsp;&nbsp;→ factor after blending</td><td>${mult(M.H.fTot)}</td><td>${mult(M.A.fTot)}</td></tr>
+    </tbody>`;
+  const row=(label,pmf,line)=>{const o=xkOver(pmf,line);return`<tr><td class="t">${label}</td><td>${pct(o)} <span style="color:var(--muted);font-size:11px;">${odds(o)}</span></td><td>${pct(1-o)} <span style="color:var(--muted);font-size:11px;">${odds(1-o)}</span></td></tr>`;};
+  const mid=Math.round(M.T),tl=[mid-2.5,mid-1.5,mid-0.5,mid+0.5,mid+1.5].filter(x=>x>0);
+  const sl=v=>{const c=Math.round(v);return[c-1.5,c-0.5,c+0.5].filter(x=>x>0);};
+  document.getElementById("xkLines").innerHTML=`<thead><tr><th style="text-align:left;">Line</th><th>Over <span class="plh-sub">fair odds</span></th><th>Under</th></tr></thead><tbody>
+    ${tl.map(l=>row("Total "+l,M.pT,l)).join("")}
+    ${sl(M.eH).map(l=>row(esc(home)+" "+l,M.pH,l)).join("")}
+    ${sl(M.eA).map(l=>row(esc(away)+" "+l,M.pA,l)).join("")}
+    <tr><td class="t">Most corners</td><td colspan="2">${esc(home)} ${pct(M.more)} <span style="color:var(--muted);font-size:11px;">${odds(M.more)}</span> · level ${pct(M.level)} · ${esc(away)} ${pct(M.less)} <span style="color:var(--muted);font-size:11px;">${odds(M.less)}</span></td></tr>
+    </tbody>`;
+  const skipped=allRows.length-M.rows.length;
+  document.getElementById("xkSub").textContent=`From ${M.rows.length} games with corners recorded in your current-season file; league baseline from the last ${M.recent.length}.`;
+  document.getElementById("xkNote").innerHTML=`Tested on 22 Premier League seasons (8,359 games, each predicted only from earlier games that season). The club figures sharpen <b>each side&rsquo;s</b> corner count by about 10%, and who wins the count is well judged: when it gave the home side 77%, they had more corners 77% of the time. `+
+    `For the <b>total</b> they help only about 1%: good sides win corners and stop the other side getting them, so totals stay near the league average whatever the matchup. `+
+    `Chances allow for corners being streakier than a simple Poisson curve.`+(skipped?` ${skipped} game${skipped===1?"":"s"} in the file had no corners recorded and ${skipped===1?"was":"were"} left out.`:"");
+}
+
 // ── Run-in tab helper ─────────────────────────────────────────────────
 function showRuninTab(id,btn){
   ["selected","league"].forEach(t=>{
@@ -5573,24 +5761,87 @@ function parseFixtureFeedJson(json){
   return parsed;
 }
 
-async function loadFixturesFromUrl(){
-  const url=document.getElementById("fixtureUrlInput").value.trim();
-  const statusEl=document.getElementById("fixtureStatus");
-  if(!url){statusEl.textContent="⚠️ Enter a feed URL first.";statusEl.style.color="#fca5a5";return;}
-  statusEl.textContent="Loading…";statusEl.style.color="var(--muted)";
-  try{
-    const res=await fetch(url);
-    if(!res.ok)throw new Error(`HTTP ${res.status}`);
-    const json=await res.json();
-    const parsed=parseFixtureFeedJson(json);
-    finaliseFixtureLoad(parsed,"live feed");
-  }catch(err){
-    // Likely CORS or network — fall back to manual paste
-    document.getElementById("fixtureUrlPasteWrap").classList.remove("hidden");
-    statusEl.textContent=`⚠️ Direct fetch failed (${err.message}) — use the paste box below.`;
-    statusEl.style.color="#fca5a5";
-  }
+// ── Live fixtures: pick a league and season instead of typing a feed address ──
+// fixturedownload.com names feeds <league>-<season start year>, e.g. epl-2026 = 2026/27.
+// The browser blocks that site directly, so with a corsproxy.io key saved the request goes
+// through the proxy. The key lives in this browser's storage only, never in this file, so a
+// public GitHub repo doesn't give it away.
+const FX_KEY_STORAGE="bazza_corsproxy_key",FX_PREFS="fff_fixture_feed";
+const fxStore={get(k){try{return localStorage.getItem(k)||"";}catch(e){return"";}},set(k,v){try{v?localStorage.setItem(k,v):localStorage.removeItem(k);return true;}catch(e){return false;}}};
+const FX_LEAGUE_NAMES={epl:"Premier League",championship:"Championship"};
+function fxInit(){
+  const now=new Date(),cur=now.getMonth()>=6?now.getFullYear():now.getFullYear()-1;
+  document.getElementById("fxSeason").innerHTML=[cur+1,cur,cur-1,cur-2].map(y=>`<option value="${y}">${y}/${String((y+1)%100).padStart(2,"0")}</option>`).join("");
+  let prefs={};try{prefs=JSON.parse(fxStore.get(FX_PREFS)||"{}")||{};}catch(e){}
+  document.getElementById("fxSeason").value=String(prefs.season&&prefs.season>=cur-2&&prefs.season<=cur+1?prefs.season:cur);
+  document.getElementById("fxLeague").value=FX_LEAGUE_NAMES[prefs.league]||prefs.league==="custom"?prefs.league:"epl";
+  document.getElementById("fixtureUrlInput").value=prefs.custom||"";
+  fxLeagueChange(true);fxKeyState();
 }
+function fxLeagueChange(silent){
+  const custom=document.getElementById("fxLeague").value==="custom";
+  document.getElementById("fixtureUrlInput").classList.toggle("hidden",!custom);
+  document.getElementById("fxSeason").classList.toggle("hidden",custom);
+}
+function fxFeedUrl(){
+  const lg=document.getElementById("fxLeague").value;
+  if(lg!=="custom")return"https://fixturedownload.com/feed/json/"+lg+"-"+document.getElementById("fxSeason").value;
+  let v=document.getElementById("fixtureUrlInput").value.trim();if(!v)return"";
+  // accept a pasted corsproxy address too: pull the real feed out of it (and the key, once)
+  const m=/[?&]url=([^&]+)/.exec(v);
+  if(/corsproxy\.io/i.test(v)&&m){const k=/[?&]key=([^&]+)/.exec(v);if(k&&!fxStore.get(FX_KEY_STORAGE)){fxStore.set(FX_KEY_STORAGE,decodeURIComponent(k[1]));fxKeyState();}v=decodeURIComponent(m[1]);
+    const clean=v.replace(/^https?:\/\/fixturedownload\.com\/feed\/json\//i,"");document.getElementById("fixtureUrlInput").value=clean;}
+  if(/^https?:\/\//i.test(v))return v;
+  return"https://fixturedownload.com/feed/json/"+v.replace(/^\/+|\/+$/g,"");
+}
+function fxFeedLabel(){
+  const lg=document.getElementById("fxLeague").value;
+  if(lg==="custom"){const u=fxFeedUrl();return u.split("/").pop()||"feed";}
+  const y=+document.getElementById("fxSeason").value;return FX_LEAGUE_NAMES[lg]+" "+y+"/"+String((y+1)%100).padStart(2,"0");
+}
+function fxKeyState(){
+  const has=!!fxStore.get(FX_KEY_STORAGE),el=document.getElementById("fxKeyState");
+  el.innerHTML=has?'<span style="color:#86efac;">✓ Proxy key saved in this browser</span>':'No proxy key yet: the browser will probably block the feed';
+  document.getElementById("fxKeyToggle").textContent=has?"🔑 Change key":"🔑 Add proxy key";
+}
+function fxToggleKey(){const w=document.getElementById("fxKeyWrap");w.classList.toggle("hidden");if(!w.classList.contains("hidden"))document.getElementById("fxKeyInput").focus();}
+function fxSaveKey(){
+  const v=document.getElementById("fxKeyInput").value.trim();if(!v)return;
+  const ok=fxStore.set(FX_KEY_STORAGE,v);document.getElementById("fxKeyInput").value="";
+  document.getElementById("fxKeyWrap").classList.add("hidden");fxKeyState();
+  if(!ok){const st=document.getElementById("fixtureStatus");st.textContent="⚠️ This browser won't save it (private mode?).";st.style.color="#fca5a5";}
+}
+function fxClearKey(){fxStore.set(FX_KEY_STORAGE,"");document.getElementById("fxKeyInput").value="";document.getElementById("fxKeyWrap").classList.add("hidden");fxKeyState();}
+async function fxFetchJson(url){const res=await fetch(url);if(!res.ok)throw new Error(`HTTP ${res.status}`);return res.json();}
+async function loadFixturesFromUrl(){
+  const statusEl=document.getElementById("fixtureStatus"),btn=document.getElementById("fixtureUrlBtn");
+  const feed=fxFeedUrl();
+  if(!feed){statusEl.textContent="⚠️ Enter a feed name first.";statusEl.style.color="#fca5a5";return;}
+  const lg=document.getElementById("fxLeague").value;
+  fxStore.set(FX_PREFS,JSON.stringify({league:lg,season:+document.getElementById("fxSeason").value,custom:lg==="custom"?document.getElementById("fixtureUrlInput").value.trim():""}));
+  const key=fxStore.get(FX_KEY_STORAGE),label=fxFeedLabel();
+  statusEl.textContent=`Loading ${label}…`;statusEl.style.color="var(--muted)";btn.disabled=true;
+  const routes=key?[["proxy","https://corsproxy.io/?key="+encodeURIComponent(key)+"&url="+encodeURIComponent(feed)],["direct",feed]]:[["direct",feed]];
+  let lastErr=null;
+  try{
+    for(const [how,url] of routes){
+      try{
+        const parsed=parseFixtureFeedJson(await fxFetchJson(url));
+        if(!parsed.length){lastErr=new Error("no fixtures in that feed (check the league and season)");break;}
+        finaliseFixtureLoad(parsed,label+(how==="proxy"?" (via proxy)":""));return;
+      }catch(err){if(!lastErr||how==="proxy")lastErr=err;}   // the proxy's answer explains more than the direct attempt's
+    }
+    document.getElementById("fxPasteLink").href=feed;
+    document.getElementById("fixtureUrlPasteWrap").classList.remove("hidden");
+    const msg=String(lastErr&&lastErr.message||"blocked");
+    statusEl.textContent=/^HTTP 40[13]/.test(msg)&&key?`⚠️ The proxy turned the key down (${msg}). Check it in your corsproxy.io console, or use the paste box below.`:
+      /^HTTP 404/.test(msg)?`⚠️ No such feed (${label}). The season may not be published yet.`:
+      `⚠️ Couldn't load ${label} (${msg}). Use the paste box below.`;
+    statusEl.style.color="#fca5a5";
+  }finally{btn.disabled=false;}
+}
+
+fxInit();
 
 function loadFixturesFromPastedJson(){
   const statusEl=document.getElementById("fixtureStatus");
@@ -6017,6 +6268,7 @@ function plhAdopt(rows){
   plhBuildHonour();
   plhOtdInit();
   plhEraInit();
+  btInit();
   plhRender();
 }
 async function plhOnFile(file){
@@ -6545,6 +6797,174 @@ function plhEraRender(){
   if(club&&!def.club)note+="Club view counts every game "+plhName(club)+" played, both sides added together. ";
   if(club)note+="Seasons outside the Premier League are gaps.";
   document.getElementById("plhEraNote").textContent=note.trim();
+}
+
+// ── MODEL CHECK (backtest) ───────────────────────────────────────────
+// Replays the 22 seasons through the app's own buildPrediction(): every game is predicted using only
+// the games before it in the same season, exactly as the Analysis tab would have seen them that day.
+// It temporarily swaps allRows (and switches off the United bias), then puts everything back.
+const BT_MODES=[["plain","Standard"],["weighted","Weighted recent form"],["dixon-coles","Dixon-Coles tweak"],["weighted-dc","Weighted + Dixon-Coles"],["decay","Time-Decay"],["decay-dc","Time-Decay + Dixon-Coles"]];
+const BT={results:{},running:false};
+function btRow(r,i){
+  const n=v=>{const x=Number(v);return Number.isFinite(x)?x:0;};
+  return{id:i+1,homeTeam:r.HomeTeam,awayTeam:r.AwayTeam,homeGoals:r.HomeGoals,awayGoals:r.AwayGoals,
+    htHomeGoals:r.HalfHomeGoals==null?null:n(r.HalfHomeGoals),htAwayGoals:r.HalfAwayGoals==null?null:n(r.HalfAwayGoals),
+    result:r.HomeGoals>r.AwayGoals?"H":r.HomeGoals<r.AwayGoals?"A":"D",
+    homeShots:n(r.ShotsHome),awayShots:n(r.ShotsAway),homeSOT:n(r.ShotsOnTargetHome),awaySOT:n(r.ShotsOnTargetAway),
+    homeFouls:n(r.FoulsHome),awayFouls:n(r.FoulsAway),homeCorners:n(r.CornersHome),awayCorners:n(r.CornersAway),
+    homeYellow:n(r.YellowHome),awayYellow:n(r.YellowAway),homeRed:n(r.RedHome),awayRed:n(r.RedAway),referee:r.Referee||"",season:null};
+}
+const btOdd=v=>{const x=+v;return x>1.01&&x<1000?x:null;};
+async function btRun(mode,minGames,onProgress,preset){
+  const saved={rows:allRows,mode:predModeSelect.value,bias:unitedBias.checked,set:MODEL_SET};
+  const out=[];
+  try{
+    predModeSelect.value=mode;unitedBias.checked=false;if(preset)MODEL_SET=MODEL_PRESETS[preset];
+    const seasons=PLH.seasons.slice().sort((a,b)=>a-b);
+    for(let si=0;si<seasons.length;si++){
+      const games=PLH.rows.filter(r=>r.Season===seasons[si]).sort((a,b)=>String(a.Date).localeCompare(String(b.Date))||String(a.Time).localeCompare(String(b.Time)));
+      const prior=[],hc={},ac={};
+      games.forEach((r,i)=>{
+        const h=r.HomeTeam,a=r.AwayTeam;
+        if((hc[h]||0)>=minGames&&(ac[a]||0)>=minGames){
+          allRows=prior;
+          const p=buildPrediction(h,a,"all");
+          if(p){
+            const o1=btOdd(r.Odd1),ox=btOdd(r.OddX),o2=btOdd(r.Odd2),oo=btOdd(r.OddO25),ou=btOdd(r.OddU25),gg=btOdd(r.OddGG),ng=btOdd(r.OddNG);
+            out.push({s:r.Season,res:r.HomeGoals>r.AwayGoals?0:r.HomeGoals===r.AwayGoals?1:2,o25:r.HomeGoals+r.AwayGoals>2?1:0,btts:r.HomeGoals>0&&r.AwayGoals>0?1:0,
+              p:[p.homeWin,p.draw,p.awayWin],po25:p.over25,pbtts:p.btts,lh:p.lh,la:p.la,ng:prior.length,hn:hc[h],an:ac[a],
+              odds:o1&&ox&&o2?[o1,ox,o2]:null,oddsOU:oo&&ou?[oo,ou]:null,oddsBT:gg&&ng?[gg,ng]:null,
+              base:(()=>{const n=prior.length;if(n<20)return null;let H=0,D=0;prior.forEach(m=>{if(m.homeGoals>m.awayGoals)H++;else if(m.homeGoals===m.awayGoals)D++;});return[(H+1)/(n+3),(D+1)/(n+3),(n-H-D+1)/(n+3)];})()});
+          }
+        }
+        prior.push(btRow(r,i));hc[h]=(hc[h]||0)+1;ac[a]=(ac[a]||0)+1;
+      });
+      if(onProgress){MODEL_SET=saved.set;onProgress((si+1)/seasons.length);await new Promise(res=>setTimeout(res,0));if(preset)MODEL_SET=MODEL_PRESETS[preset];}
+    }
+  }finally{allRows=saved.rows;predModeSelect.value=saved.mode;unitedBias.checked=saved.bias;MODEL_SET=saved.set;}
+  return out;
+}
+// Bookmaker prices include a margin, so implied chances add up to more than 100%: scale them back to 100%.
+const btFair=o=>{const q=o.map(x=>1/x),t=q.reduce((a,b)=>a+b,0);return q.map(x=>x/t);};
+function btScore(G,edgeMin=0.05){
+  const ll=(p)=>-Math.log(Math.max(p,1e-6));
+  const both=G.filter(g=>g.odds&&g.base);
+  const S={n:G.length,nBoth:both.length,llM:0,llB:0,llBase:0,hitM:0,hitB:0,brM:0,brB:0};
+  both.forEach(g=>{const f=btFair(g.odds);S.llM+=ll(g.p[g.res]);S.llB+=ll(f[g.res]);S.llBase+=ll(g.base[g.res]);
+    const am=g.p.indexOf(Math.max(...g.p)),ab=f.indexOf(Math.max(...f));S.hitM+=am===g.res;S.hitB+=ab===g.res;
+    for(let k=0;k<3;k++){S.brM+=(g.p[k]-(k===g.res))**2;S.brB+=(f[k]-(k===g.res))**2;}});
+  const n=both.length||1;
+  ["llM","llB","llBase"].forEach(k=>S[k]/=n);S.hitM/=n;S.hitB/=n;S.brM/=n;S.brB/=n;
+  S.geoM=Math.exp(-S.llM);S.geoB=Math.exp(-S.llB);S.geoBase=Math.exp(-S.llBase);
+  // value bets: model chance × price ≥ 1 + edge, £1 level stakes
+  const vb={bets:0,won:0,ret:0,byKind:{}};
+  const add=(kind,p,odds,won)=>{if(p*odds<1+edgeMin)return;const k=vb.byKind[kind]||(vb.byKind[kind]={bets:0,won:0,ret:0});[vb,k].forEach(x=>{x.bets++;if(won){x.won++;x.ret+=odds;}});};
+  G.forEach(g=>{
+    if(g.odds)["Home win","Draw","Away win"].forEach((nm,k)=>add(nm,g.p[k],g.odds[k],g.res===k));
+    if(g.oddsOU){add("Over 2.5",g.po25,g.oddsOU[0],g.o25===1);add("Under 2.5",1-g.po25,g.oddsOU[1],g.o25===0);}
+    if(g.oddsBT){add("Both score",g.pbtts,g.oddsBT[0],g.btts===1);add("Not both",1-g.pbtts,g.oddsBT[1],g.btts===0);}
+  });
+  S.vb=vb;return S;
+}
+
+function btInit(){
+  const sel=document.getElementById("btMode");if(sel.options.length)return;
+  sel.innerHTML=BT_MODES.map(([v,l])=>`<option value="${v}">${esc(l)}</option>`).join("");
+}
+function btBusy(on){["btRunBtn","btAllBtn"].forEach(id=>document.getElementById(id).disabled=on);document.getElementById("btProg").classList.toggle("hidden",!on);BT.running=on;}
+async function btGet(mode,minG,prog,preset="current"){
+  const k=mode+"|"+minG+"|"+preset;if(BT.results[k])return BT.results[k];
+  const G=await btRun(mode,minG,prog,preset);BT.results[k]=G;return G;
+}
+async function btGo(){
+  if(BT.running||!PLH.loaded)return;btBusy(true);
+  const bar=document.getElementById("btProgBar");bar.style.width="0";
+  try{
+    BT.mode=document.getElementById("btMode").value;BT.minG=+document.getElementById("btMin").value;
+    BT.G=await btGet(BT.mode,BT.minG,f=>bar.style.width=(50*f).toFixed(0)+"%","current");
+    BT.G0=await btGet(BT.mode,BT.minG,f=>bar.style.width=(50+50*f).toFixed(0)+"%","v20");
+    document.getElementById("btAll").innerHTML="";
+    btRender();
+  }finally{btBusy(false);}
+}
+const btPct=x=>(100*x).toFixed(1)+"%";
+function btRender(){
+  const G=BT.G,S=btScore(G,+document.getElementById("btEdge").value);BT.S=S;
+  document.getElementById("btOut").classList.remove("hidden");
+  const modeName=BT_MODES.find(m=>m[0]===BT.mode)[1];
+  document.getElementById("btStats").innerHTML=[
+    [S.nBoth.toLocaleString("en-GB"),"games predicted"],
+    [btPct(S.geoM),"chance the model gave what happened"],
+    [btPct(S.geoB),"&hellip; the bookmakers gave it"],
+    [btPct(S.geoBase),"&hellip; just using the league&rsquo;s home/draw/away rates"],
+    [btPct(S.hitM)+' <span style="font-size:13px;color:var(--muted);">v '+btPct(S.hitB)+'</span>',"picked the right result: model v bookies&rsquo; favourite"]
+  ].map(([v,l])=>`<div class="plh-stat"><div class="v">${v}</div><div class="l">${l}</div></div>`).join("");
+  const vsBase=S.geoM-S.geoBase,vsBook=S.geoB-S.geoM;
+  let verdict=`<b>${esc(modeName)}</b>, from each side&rsquo;s ${BT.minG}${BT.minG===1?"st":BT.minG===3?"rd":"th"} game at that venue: `;
+  verdict+=vsBase>0.003?`it <span class="bt-good">beats</span> simply guessing the league&rsquo;s usual home/draw/away split, `:vsBase<-0.003?`it does <span class="bt-bad">worse than</span> simply guessing the league&rsquo;s usual home/draw/away split, `:`it&rsquo;s no better than guessing the league&rsquo;s usual home/draw/away split, `;
+  verdict+=`and the bookmakers are ${vsBook>0.003?"ahead of it":"level with it"} by ${(100*Math.abs(vsBook)).toFixed(1)} points. `;
+  const cal=btCalBins(G,"res"),top=cal.filter(b=>b.n>=100&&b.p>=0.6);
+  if(top.length){const t=top[top.length-1];if(t.p-t.a>0.05)verdict+=`It&rsquo;s <b>overconfident</b>: when it said about ${Math.round(100*t.p)}%, it happened ${Math.round(100*t.a)}% of the time.`;}
+  document.getElementById("btVerdict").innerHTML=`<div class="plh-ex" style="margin:0;">${verdict}</div>`;
+  btRenderCal();btRenderStage();btRenderValue();btRenderBA();
+  document.getElementById("btNote").innerHTML=`&ldquo;Chance it gave what happened&rdquo; is the average (geometric) chance each forecast put on the actual result: higher is better, and it punishes confident misses hard. Bookmaker odds are turned into chances with their margin taken out. `+
+    `The odds are whatever your history file carries; which bookmaker, and whether they&rsquo;re closing prices, isn&rsquo;t recorded. The United bias is switched off for the test, and nothing in the Analysis tab is changed.`;
+}
+function btRenderBA(){
+  const S1=btScore(BT.G),S0=btScore(BT.G0);
+  const early=G=>btScore(G.filter(g=>Math.min(g.hn,g.an)<=5)),top=G=>{const b=btCalBins(G,"res").filter(x=>x.n>=100&&x.p>=0.6);const t=b[b.length-1];return t?`said ${Math.round(100*t.p)}% → ${Math.round(100*t.a)}%`:"–";};
+  const roi=S=>S.vb.bets?S.vb.ret/S.vb.bets-1:0,fr=x=>`<span class="${x>0?"bt-good":"bt-bad"}">${x>=0?"+":"−"}${Math.abs(100*x).toFixed(1)}p</span>`;
+  const e1=early(BT.G),e0=early(BT.G0),hasEarly=e1.nBoth>0;
+  const row=(nm,S,E,G,cls)=>`<tr${cls?` style="${cls}"`:""}><td class="t">${nm}</td><td>${btPct(S.geoM)}</td><td>${btPct(S.hitM)}</td>${hasEarly?`<td>${btPct(E.geoM)}</td>`:""}<td>${top(G)}</td><td>${fr(roi(S))}</td></tr>`;
+  document.getElementById("btBA").innerHTML=`<thead><tr><th style="text-align:left;"></th><th>Chance given to<br>what happened</th><th>Right result</th>${hasEarly?"<th>Early season<br>(≤5 games)</th>":""}<th>Most confident<br>forecasts</th><th>Value picks<br>per £1</th></tr></thead><tbody>
+    ${row(MODEL_PRESETS.v20.label,S0,e0,BT.G0,"opacity:.75")}
+    ${row("<b>"+MODEL_PRESETS.current.label+"</b>",S1,e1,BT.G)}
+    <tr style="color:var(--muted);"><td class="t">Bookmakers</td><td>${btPct(S1.geoB)}</td><td>${btPct(S1.hitB)}</td>${hasEarly?`<td>${btPct(e1.geoB)}</td>`:""}<td></td><td></td></tr>
+    <tr style="color:var(--muted);"><td class="t">League home/draw/away split</td><td>${btPct(S1.geoBase)}</td><td></td>${hasEarly?`<td>${btPct(e1.geoBase)}</td>`:""}<td></td><td></td></tr></tbody>`;
+}
+
+function btCalBins(G,mk){
+  const bins=Array.from({length:10},()=>({sp:0,sa:0,n:0}));
+  const put=(p,hit)=>{const b=bins[Math.min(9,Math.floor(p*10))];b.sp+=p;b.sa+=hit;b.n++;};
+  G.forEach(g=>{if(mk==="res")[0,1,2].forEach(k=>put(g.p[k],g.res===k?1:0));else if(mk==="o25")put(g.po25,g.o25);else put(g.pbtts,g.btts);});
+  return bins.map((b,i)=>({i,n:b.n,p:b.n?b.sp/b.n:null,a:b.n?b.sa/b.n:null})).filter(b=>b.n);
+}
+function btRenderCal(){
+  const mk=document.getElementById("btMarket").value,bins=btCalBins(BT.G,mk).filter(b=>b.n>=20),bins0=BT.G0?btCalBins(BT.G0,mk).filter(b=>b.n>=20):[];
+  const W=420,H=330,pL=44,pR=12,pT=12,pB=40,iw=W-pL-pR,ih=H-pT-pB,X=v=>pL+iw*v,Y=v=>pT+ih*(1-v);
+  let g="";
+  for(let v=0;v<=1.0001;v+=0.2)g+=`<line x1="${pL}" x2="${W-pR}" y1="${Y(v)}" y2="${Y(v)}" style="stroke:var(--chart-grid);"/><text x="${pL-6}" y="${Y(v)+4}" text-anchor="end" style="font-size:10.5px;fill:var(--muted);">${Math.round(v*100)}%</text><text x="${X(v)}" y="${H-pB+15}" text-anchor="middle" style="font-size:10.5px;fill:var(--muted);">${Math.round(v*100)}%</text>`;
+  g+=`<text x="${pL+iw/2}" y="${H-6}" text-anchor="middle" style="font-size:11px;fill:var(--muted);">model said</text><text transform="translate(11 ${pT+ih/2}) rotate(-90)" text-anchor="middle" style="font-size:11px;fill:var(--muted);">it happened</text>`;
+  g+=`<line x1="${X(0)}" y1="${Y(0)}" x2="${X(1)}" y2="${Y(1)}" style="stroke:var(--muted);stroke-dasharray:4 4;opacity:.7;"/><text x="${X(0.97)}" y="${Y(0.97)+16}" text-anchor="end" style="font-size:10px;fill:var(--muted);">perfect</text>`;
+  const maxN=Math.max(...bins.map(b=>b.n));
+  if(bins0.length)g+=`<path d="${bins0.map((b,i)=>(i?"L":"M")+X(b.p).toFixed(1)+" "+Y(b.a).toFixed(1)).join(" ")}" fill="none" style="stroke:var(--col-neutral);stroke-width:2;stroke-dasharray:5 4;"/>`+bins0.map(b=>`<circle cx="${X(b.p).toFixed(1)}" cy="${Y(b.a).toFixed(1)}" r="3" style="fill:var(--col-neutral);"><title>Before the fix: said ${Math.round(100*b.p)}% → happened ${Math.round(100*b.a)}%</title></circle>`).join("");
+  g+=`<path d="${bins.map((b,i)=>(i?"L":"M")+X(b.p).toFixed(1)+" "+Y(b.a).toFixed(1)).join(" ")}" fill="none" style="stroke:var(--accent);stroke-width:2.2;"/>`;
+  bins.forEach(b=>{g+=`<circle cx="${X(b.p).toFixed(1)}" cy="${Y(b.a).toFixed(1)}" r="${(3+6*Math.sqrt(b.n/maxN)).toFixed(1)}" style="fill:var(--accent);fill-opacity:.85;stroke:var(--chart-dot-stroke);stroke-width:1.5;"><title>Said ${Math.round(100*b.p)}% → happened ${Math.round(100*b.a)}% (${b.n.toLocaleString("en-GB")} forecasts)</title></circle>`;});
+  document.getElementById("btCal").innerHTML=`<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Calibration chart">${g}</svg><div class="plh-note" style="margin-top:2px;">Dots on the diagonal = honest forecasts; below it = too confident. Blue = current model (bigger dot = more forecasts); grey dashed = before the fix.</div>`;
+}
+function btRenderStage(){
+  const bands=[[1,2,"1–2 games"],[3,5,"3–5"],[6,9,"6–9"],[10,99,"10+"]];
+  const rows=bands.map(([lo,hi,l])=>{const G=BT.G.filter(g=>{const m=Math.min(g.hn,g.an);return m>=lo&&m<=hi;});if(!G.length)return"";const S=btScore(G);
+    const d=S.geoM-S.geoBase;return`<tr><td class="t">${l}</td><td>${S.nBoth.toLocaleString("en-GB")}</td><td>${btPct(S.geoM)}</td><td>${btPct(S.geoB)}</td><td class="${d>0.003?"bt-good":d<-0.003?"bt-bad":""}">${d>=0?"+":""}${(100*d).toFixed(1)}</td></tr>`;}).join("");
+  document.getElementById("btStage").innerHTML=`<thead><tr><th style="text-align:left;">Fewest games<br>at venue</th><th>Games</th><th>Model</th><th>Bookies</th><th>v league<br>guess</th></tr></thead><tbody>${rows}</tbody>`;
+}
+function btRenderValue(){
+  const S=btScore(BT.G,+document.getElementById("btEdge").value),vb=S.vb;
+  const order=["Home win","Draw","Away win","Over 2.5","Under 2.5","Both score","Not both"];
+  const line=(nm,x)=>{const roi=x.ret/x.bets-1;return`<tr><td class="t">${nm}</td><td>${x.bets.toLocaleString("en-GB")}</td><td>${btPct(x.won/x.bets)}</td><td class="${roi>0?"bt-good":"bt-bad"}">${roi>=0?"+":"−"}${Math.abs(100*roi).toFixed(1)}p</td></tr>`;};
+  document.getElementById("btValue").innerHTML=`<thead><tr><th style="text-align:left;">Market</th><th>Bets</th><th>Won</th><th>Per £1</th></tr></thead><tbody>${order.filter(k=>vb.byKind[k]).map(k=>line(k,vb.byKind[k])).join("")}${vb.bets?line("<b>All</b>",vb):'<tr><td colspan="4" class="t">No bets at this edge.</td></tr>'}</tbody>`;
+}
+async function btCompareAll(){
+  if(BT.running||!PLH.loaded)return;btBusy(true);
+  const bar=document.getElementById("btProgBar"),minG=+document.getElementById("btMin").value,res=[];
+  try{
+    for(let i=0;i<BT_MODES.length;i++){const G=await btGet(BT_MODES[i][0],minG,f=>bar.style.width=(100*(i+f)/BT_MODES.length).toFixed(0)+"%");res.push([BT_MODES[i][1],btScore(G)]);}
+    if(!BT.G){BT.mode=BT_MODES[0][0];BT.minG=minG;BT.G=BT.results[BT.mode+"|"+minG+"|current"];BT.G0=await btGet(BT.mode,minG,null,"v20");btRender();}
+    const best=Math.max(...res.map(r=>r[1].geoM));
+    document.getElementById("btAll").innerHTML=`<div class="xc-h" style="margin-top:16px;">All six models, from each side&rsquo;s ${minG}${minG===1?"st":minG===3?"rd":"th"} game at that venue</div><div class="timing-table-wrap"><table class="plh-table"><thead><tr><th style="text-align:left;">Model</th><th>Chance given to what happened</th><th>Right result</th><th>Value picks per £1 (5%+)</th></tr></thead><tbody>${
+      res.map(([nm,S])=>{const roi=S.vb.bets?S.vb.ret/S.vb.bets-1:0;return`<tr><td class="t">${nm===res.find(r=>r[1].geoM===best)[0]?"<b>"+esc(nm)+" ★</b>":esc(nm)}</td><td>${btPct(S.geoM)}</td><td>${btPct(S.hitM)}</td><td class="${roi>0?"bt-good":"bt-bad"}">${roi>=0?"+":"−"}${Math.abs(100*roi).toFixed(1)}p</td></tr>`;}).join("")
+    }<tr><td class="t" style="color:var(--muted);">Bookmakers</td><td style="color:var(--muted);">${btPct(res[0][1].geoB)}</td><td style="color:var(--muted);">${btPct(res[0][1].hitB)}</td><td></td></tr></tbody></table></div>`;
+  }finally{btBusy(false);}
 }
 
 // ── COMBINATION FINDER: how often has this exact mix of stats happened? ──
