@@ -783,6 +783,10 @@
     .bh-odds-input{width:100%;padding:7px 6px;border-radius:8px;border:1px solid rgba(255,255,255,0.15);background:rgba(255,255,255,0.07);color:var(--text);font-size:17px;font-weight:800;text-align:center;transition:border-color 0.2s;-moz-appearance:textfield;}
     .bh-odds-input::-webkit-outer-spin-button,.bh-odds-input::-webkit-inner-spin-button{-webkit-appearance:none;}
     .bh-odds-input:focus{outline:none;border-color:rgba(96,165,250,0.5);}
+    .bh-cc-table select{width:auto;padding:4px 8px;font-size:13px;}
+    .bh-cc-table input{width:78px;padding:5px 6px;border-radius:7px;border:1px solid var(--border);background:rgba(255,255,255,0.07);color:var(--text);font-size:14px;font-weight:800;text-align:center;}
+    .bh-cc-table td{vertical-align:middle;}
+    .bh-cc-table .pm{font-size:11px;color:var(--muted);display:block;}
     .bh-odds-model{font-size:11px;color:var(--muted);margin-top:5px;min-height:15px;}
     .bh-shared-tag{font-size:9px;letter-spacing:0.08em;text-transform:uppercase;color:rgba(96,165,250,0.6);margin-top:2px;font-weight:700;}
 
@@ -2087,6 +2091,14 @@
                 <div class="bh-shared-tag" style="opacity:0;">&#8203;</div>
               </div>
             </div>
+          </div>
+
+          <!-- Cards & corners odds -->
+          <div class="bh-odds-section" id="bhCcSection">
+            <div class="bh-odds-title">🟨⛳ Cards &amp; corners</div>
+            <div class="bh-odds-sub">Pick a line and type the bookie's over and/or under odds. Chances come from the Expected cards and Expected corners panels in Analysis. Each line starts nearest the model's figure; lines Highlightly returns fill in by themselves.</div>
+            <div class="timing-table-wrap"><table class="plh-table bh-cc-table" id="bhCcTable"></table></div>
+            <details id="bhHlMarketsWrap" class="hidden" style="margin-top:8px;font-size:12px;color:var(--muted);"><summary style="cursor:pointer;">Markets Highlightly returned for this match (<span id="bhHlMarketsCount">0</span>)</summary><div id="bhHlMarkets" style="margin-top:6px;line-height:1.6;"></div></details>
           </div>
 
           <!-- EV ranked table -->
@@ -7349,6 +7361,7 @@ async function fetchHighlightlyOddsAndPredictions(){
 
       const btts = findMarket("Both Teams to Score");
       setIfFound("bhOddsBtts", findValue(btts,"Yes"));
+      oddsFilled += bhCcReadHighlightly(markets, home, away);
 
       // Keep Value Finder in sync the same way manual typing does
       [["bhOddsHome","vfHomeOdds"],["bhOddsDraw","vfDrawOdds"],["bhOddsAway","vfAwayOdds"]].forEach(([bhId,vfId])=>{
@@ -7405,6 +7418,97 @@ function _initOddsSync(){
     const el = document.getElementById(id);
     if(el) el.addEventListener("input", renderBettingHub);
   });
+}
+
+// ── Betting Hub: cards & corners markets ───────────────────────────────
+// Probabilities come straight from the Expected cards / Expected corners models (xcModel / xkModel),
+// so the hub and those panels always agree. Team cards = that side's yellows + half the expected reds
+// (bookies' team-card markets usually count reds; the total here counts each red once, so check
+// whether your bookie counts a red as 2 or uses booking points before trusting an edge).
+const BH_CC=[
+  {key:"cardsT",label:"Total cards",kind:"cards",side:"T",lines:[1.5,2.5,3.5,4.5,5.5,6.5,7.5]},
+  {key:"cardsH",label:"{H} cards",kind:"cards",side:"H",lines:[0.5,1.5,2.5,3.5,4.5]},
+  {key:"cardsA",label:"{A} cards",kind:"cards",side:"A",lines:[0.5,1.5,2.5,3.5,4.5]},
+  {key:"cornT",label:"Total corners",kind:"corners",side:"T",lines:[6.5,7.5,8.5,9.5,10.5,11.5,12.5,13.5]},
+  {key:"cornH",label:"{H} corners",kind:"corners",side:"H",lines:[1.5,2.5,3.5,4.5,5.5,6.5,7.5,8.5]},
+  {key:"cornA",label:"{A} corners",kind:"corners",side:"A",lines:[1.5,2.5,3.5,4.5,5.5,6.5,7.5,8.5]}
+];
+let _bhCcMatch="",_bhCcHl={};   // _bhCcHl[key][line]={over,under} from Highlightly
+function bhCcModels(h,a){
+  const C=(typeof xcModel==="function")?xcModel(h,a):null,K=(typeof xkModel==="function")?xkModel(h,a):null;
+  return{C:C&&!C.error?C:null,K:K&&!K.error?K:null};
+}
+function bhCcMean(def,M){
+  if(def.kind==="cards"){if(!M.C)return null;return def.side==="T"?M.C.eC:def.side==="H"?M.C.eH+M.C.eR/2:M.C.eA+M.C.eR/2;}
+  if(!M.K)return null;return def.side==="T"?M.K.T:def.side==="H"?M.K.eH:M.K.eA;
+}
+function bhCcOverProb(def,M,line){
+  const mu=bhCcMean(def,M);if(mu===null)return null;
+  if(def.kind==="cards")return xcOver(mu,line);
+  const pmf=def.side==="T"?M.K.pT:def.side==="H"?M.K.pH:M.K.pA;return xkOver(pmf,line);
+}
+function bhCcBuild(h,a,M){
+  const tb=document.getElementById("bhCcTable");if(!tb)return;
+  const nearest=(def)=>{const mu=bhCcMean(def,M);if(mu===null)return def.lines[Math.floor(def.lines.length/2)];
+    const hl=_bhCcHl[def.key];if(hl){const ls=Object.keys(hl).map(Number);if(ls.length)return ls.reduce((x,y)=>Math.abs(y-mu)<Math.abs(x-mu)?y:x);}
+    return def.lines.reduce((x,y)=>Math.abs(y-mu)<Math.abs(x-mu)?y:x);};
+  tb.innerHTML=`<thead><tr><th style="text-align:left;">Market</th><th>Line</th><th>Model over / under</th><th>Over odds</th><th>Under odds</th></tr></thead><tbody>${
+    BH_CC.map(d=>{const lbl=d.label.replace("{H}",esc(h)).replace("{A}",esc(a)),ln=nearest(d);
+      const lines=[...new Set([...d.lines,...Object.keys(_bhCcHl[d.key]||{}).map(Number)])].sort((x,y)=>x-y);
+      return`<tr data-key="${d.key}"><td class="t">${lbl}</td>
+        <td><select id="bhCcLine_${d.key}" onchange="bhCcLineChange('${d.key}')">${lines.map(l=>`<option value="${l}"${l===ln?" selected":""}>${l}</option>`).join("")}</select></td>
+        <td id="bhCcProb_${d.key}">–</td>
+        <td><input type="number" min="1.01" step="0.01" id="bhCcOver_${d.key}" placeholder="—" oninput="renderBettingHub()"></td>
+        <td><input type="number" min="1.01" step="0.01" id="bhCcUnder_${d.key}" placeholder="—" oninput="renderBettingHub()"></td></tr>`;}).join("")}</tbody>`;
+  BH_CC.forEach(d=>bhCcFillFromHl(d.key));
+}
+function bhCcFillFromHl(key){
+  const sel=document.getElementById("bhCcLine_"+key);if(!sel)return;
+  const v=(_bhCcHl[key]||{})[+sel.value];
+  document.getElementById("bhCcOver_"+key).value=v&&v.over?v.over:"";
+  document.getElementById("bhCcUnder_"+key).value=v&&v.under?v.under:"";
+}
+function bhCcLineChange(key){bhCcFillFromHl(key);renderBettingHub();}
+// Called inside renderBettingHub: refresh the table and hand back EV rows for the main table.
+function bhCcMarkets(h,a){
+  const M=bhCcModels(h,a),id=h+"|"+a,sec=document.getElementById("bhCcSection");
+  if(!sec)return[];
+  sec.style.display=(M.C||M.K)?"":"none";if(!M.C&&!M.K)return[];
+  if(_bhCcMatch!==id||!document.getElementById("bhCcLine_cardsT")){_bhCcMatch=id;bhCcBuild(h,a,M);}
+  const out=[];
+  BH_CC.forEach(d=>{
+    const line=+document.getElementById("bhCcLine_"+d.key).value,p=bhCcOverProb(d,M,line),cell=document.getElementById("bhCcProb_"+d.key);
+    const lbl=d.label.replace("{H}",h).replace("{A}",a);
+    if(p===null){cell.innerHTML='<span class="pm">no data</span>';return;}
+    cell.innerHTML=`${(100*p).toFixed(0)}% / ${(100*(1-p)).toFixed(0)}%<span class="pm">fair ${(1/Math.max(p,0.001)).toFixed(2)} / ${(1/Math.max(1-p,0.001)).toFixed(2)}</span>`;
+    out.push({key:d.key+"o",label:`${lbl} over ${line}`,prob:p,oddsId:"bhCcOver_"+d.key});
+    out.push({key:d.key+"u",label:`${lbl} under ${line}`,prob:1-p,oddsId:"bhCcUnder_"+d.key});
+  });
+  return out;
+}
+// Highlightly: list every market it returned, and pick up cards/corners over-under lines where the
+// market name makes the meaning clear. Untested against live cards/corners data: check the list.
+function bhCcReadHighlightly(markets,h,a){
+  _bhCcHl={};
+  const names=markets.map(m=>m.market).filter(Boolean);
+  const wrap=document.getElementById("bhHlMarketsWrap");
+  if(wrap){wrap.classList.toggle("hidden",!names.length);document.getElementById("bhHlMarketsCount").textContent=names.length;document.getElementById("bhHlMarkets").innerHTML=names.map(esc).join(" · ");}
+  const lc=x=>String(x||"").toLowerCase(),hl=lc(h),al=lc(a);
+  markets.forEach(m=>{
+    const nm=lc(m.market);
+    const kind=/corner/.test(nm)?"corn":/card|booking/.test(nm)?"cards":null;if(!kind)return;
+    if(/half|1st|2nd|first|second|asian|handicap|race|exact|odd|even|point|minute|player|match.?bet|most|first to/.test(nm))return;
+    const side=/\bhome\b/.test(nm)||(hl&&nm.includes(hl))?"H":/\baway\b/.test(nm)||(al&&nm.includes(al))?"A":"T";
+    const key=kind+side,nmLine=(nm.match(/(\d+\.5)/)||[])[1];
+    (m.values||[]).forEach(v=>{
+      const vl=lc(v.value),dir=/^over/.test(vl)?"over":/^under/.test(vl)?"under":null;if(!dir)return;
+      const line=+((vl.match(/(\d+\.5)/)||[])[1]||nmLine);if(!line)return;
+      const odd=parseFloat(v.odd);if(!(odd>1))return;
+      ((_bhCcHl[key]||(_bhCcHl[key]={}))[line]||(_bhCcHl[key][line]={}))[dir]=odd;
+    });
+  });
+  _bhCcMatch="";   // rebuild the table so fetched lines are offered and filled
+  return Object.values(_bhCcHl).reduce((n,o)=>n+Object.keys(o).length,0);
 }
 
 // Called from renderDashboard to keep hub prediction in sync
@@ -7477,6 +7581,7 @@ function renderBettingHub(){
     { key:"away",  label: awayTeam + " Win",    prob: pred ? pred.awayWin  : null, oddsId:"bhOddsAway" },
     { key:"o25",   label: "Over 2.5 Goals",     prob: pred ? pred.over25   : null, oddsId:"bhOddsO25"  },
     { key:"btts",  label: "BTTS (Yes)",          prob: pred ? pred.btts     : null, oddsId:"bhOddsBtts" },
+    ...bhCcMarkets(homeTeam,awayTeam),
   ];
 
   // Calculate EV for each market with odds entered
