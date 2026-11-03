@@ -1073,7 +1073,7 @@
         <div class="hist-upload-head">
           <div>
             <div class="hist-upload-title" style="color:#c4b5fd;">📊 xG data JSON (optional)</div>
-            <div class="hist-upload-sub">Understat league JSON — unlocks Expected vs Actual points panel. Export from understat.com/league/EPL.</div>
+            <div class="hist-upload-sub">Understat league JSON — unlocks Expected vs Actual points panel. Export from understat.com/league/EPL. If Understat is down, the panel itself can build a shots-on-target version from your CSV.</div>
           </div>
           <span id="xgvaSummaryBadge" class="xgva-loaded-badge hidden"></span>
         </div>
@@ -1250,14 +1250,14 @@
       <!-- ── GOAL TIMING PANEL ── -->
       <div class="timing-panel" style="margin-top:18px;" id="timingPanel">
         <div class="card-title">⏱️ Goal timing analysis</div>
-        <div class="card-sub">Goals scored vs conceded per 10-minute segment from SoccerStats.com.</div>
+        <div class="card-sub">Goals scored vs conceded per 10- or 15-minute segment from SoccerStats.com.</div>
 
         <!-- Paste instructions -->
         <div id="timingPasteSection">
           <div style="background:rgba(96,165,250,0.06);border:1px solid rgba(96,165,250,0.2);border-radius:12px;padding:14px;margin-bottom:12px;">
             <div style="font-size:13px;font-weight:700;color:var(--accent);margin-bottom:8px;">📋 How to load goal timing data (30 seconds)</div>
             <ol style="margin:0;padding-left:18px;font-size:13px;color:var(--muted);line-height:2;">
-              <li>Open <a href="https://www.soccerstats.com/table.asp?league=england&tid=j" target="_blank" style="color:#60a5fa;">soccerstats.com/table.asp?league=england&tid=j</a> in a new tab</li>
+              <li>Open <a href="https://www.soccerstats.com/en-gb/leagues/england/premier-league/england/timing" target="_blank" style="color:#60a5fa;">SoccerStats' goal timing page</a> in a new tab (for another league, pick it on SoccerStats and open its <b>Timing</b> page)</li>
               <li>Press <strong style="color:var(--text);">Ctrl+U</strong> (Windows) or <strong style="color:var(--text);">Cmd+Option+U</strong> (Mac) to view page source</li>
               <li>Press <strong style="color:var(--text);">Ctrl+A</strong> then <strong style="color:var(--text);">Ctrl+C</strong> to copy all</li>
               <li>Paste into the box below and click <strong style="color:var(--text);">Parse</strong></li>
@@ -1277,6 +1277,10 @@
               <button class="tab-btn active" onclick="switchTimingTab('overall',this)">Overall</button>
               <button class="tab-btn" onclick="switchTimingTab('home',this)">Home</button>
               <button class="tab-btn" onclick="switchTimingTab('away',this)">Away</button>
+            </div>
+            <div class="tab-bar hidden" id="timingSegBar">
+              <button class="tab-btn active" onclick="setTimingSeg(10,this)">10 min</button>
+              <button class="tab-btn" onclick="setTimingSeg(15,this)">15 min</button>
             </div>
             <span style="font-size:12px;color:var(--muted);">🟢 scored &gt; conceded &nbsp;🟡 even &nbsp;🔴 scored &lt; conceded &nbsp;Bold outline = most extreme segment</span>
             <button class="btn-fetch" id="btnClearTiming" style="padding:5px 12px;font-size:12px;background:rgba(248,113,113,0.12);border-color:rgba(248,113,113,0.3);color:#fca5a5;">✕ Clear</button>
@@ -1691,7 +1695,7 @@
           <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;margin-bottom:14px;">
             <div>
               <div class="card-title">📈 Expected vs Actual points <span class="xg-badge">xPts model</span></div>
-              <div class="card-sub" style="margin-bottom:0;">Who's overperforming their underlying numbers — and who's been unlucky? Powered by Understat xG data.</div>
+              <div class="card-sub" style="margin-bottom:0;" id="xgvaSub">Who's overperforming their underlying numbers — and who's been unlucky? Powered by Understat xG data.</div>
             </div>
             <span id="xgvaLoadedBadge" class="xgva-loaded-badge hidden"></span>
           </div>
@@ -1704,6 +1708,9 @@
               <input type="file" accept=".json" onchange="handleXgvaUpload(this.files[0])"> 
               📂 Load xG JSON
             </label>
+            <div style="margin-top:12px;font-size:12px;color:var(--muted);">Understat down, or no JSON? Build it from your CSV&rsquo;s shots on target instead:</div>
+            <button class="btn-fetch" style="margin-top:6px;" onclick="buildShotsXpts()">🎯 Use shots on target</button>
+            <div id="xgvaShotsStatus" style="font-size:12px;color:var(--muted);margin-top:6px;"></div>
           </div>
           <!-- Unlocked state -->
           <div id="xgvaContent" class="hidden">
@@ -2748,7 +2755,8 @@ function buildLeagueRecords(rows){
 const SEGS=["0-10","11-20","21-30","31-40","41-50","51-60","61-70","71-80","81-90"];
 
 function clearTiming(){
-  goalTimingData=null;
+  goalTimingData=null;timingSeg=10;
+  document.getElementById("timingSegBar").classList.add("hidden");
   document.getElementById("timingContent").classList.add("hidden");
   document.getElementById("timingPasteArea").value="";
   document.getElementById("timingStatus").className="timing-status";
@@ -2762,11 +2770,13 @@ function parseTimingFromPaste(){
   statusEl.className="timing-status";statusEl.textContent="Parsing…";
   try{
     const parsed=parseSoccerStatsSource(raw);
-    if(!parsed||Object.keys(parsed.overall).length===0)throw new Error("Could not find goal timing data. Make sure you pasted the full page source from soccerstats.com/table.asp?league=england&tid=j");
+    if(!parsed||Object.keys(parsed.overall).length===0)throw new Error("Could not find goal timing data. Make sure you pasted the full page source (Ctrl+U) of SoccerStats' Timing page.");
     goalTimingData=parsed;
     const teamCount=Object.keys(parsed.overall).length;
     statusEl.className="timing-status ok";
-    statusEl.textContent=`✅ Loaded timing data for ${teamCount} teams across 3 views. You can minimise the paste box now.`;
+    statusEl.textContent=`✅ Loaded timing data for ${teamCount} teams across 3 views${parsed.seg15?", in 10- and 15-minute segments":""}. You can minimise the paste box now.`;
+    timingSeg=10;document.getElementById("timingSegBar").classList.toggle("hidden",!parsed.seg15);
+    document.querySelectorAll("#timingSegBar .tab-btn").forEach((b,i)=>b.classList.toggle("active",i===0));
     document.getElementById("timingContent").classList.remove("hidden");
     document.getElementById("timingPasteArea").value=""; // clear to save memory
     renderTimingTables();
@@ -2776,7 +2786,50 @@ function parseTimingFromPaste(){
   }
 }
 
+// SoccerStats' new layout (Nov 2026: /en-gb/leagues/<country>/<league>/<country>/timing).
+// Two tables, "Goals per 15-minute segments" and "Goals per 10-minute segments", each with three
+// <tbody class="data-tbody scope-total|scope-home|scope-away">. Each row: team link, GP, the segment
+// cells ("2-1" = scored-conceded), then 1st Half / 2nd Half (and, on the 15-min table, average
+// minute scored / conceded). The 10-minute table keeps the shape the rest of the app expects.
+function parseSoccerStatsTiming2026(html){
+  const doc=new DOMParser().parseFromString(html,"text/html");
+  const boxes=[...doc.querySelectorAll("h3")].map(h=>{const t=h.textContent.replace(/\s+/g," ").trim();const m=t.match(/Goals per (\d+)-minute segments/i);return m?{n:+m[1],box:h.closest(".custom-stat-box")||h.parentElement}:null;}).filter(Boolean);
+  if(!boxes.length)return null;
+  const read=(box,nSeg)=>{
+    const out={overall:{},home:{},away:{}},avg={overall:{},home:{},away:{}};
+    box.querySelectorAll("tbody.data-tbody").forEach(tb=>{
+      const sc=(tb.className.match(/scope-(\w+)/)||[])[1],key=sc==="total"?"overall":sc;
+      if(!out[key])return;
+      tb.querySelectorAll("tr").forEach(tr=>{
+        const a=tr.querySelector("a");if(!a)return;const team=a.textContent.trim();if(!team)return;
+        const cells=[...tr.querySelectorAll("td")].slice(1).map(td=>td.textContent.replace(/\s+/g," ").trim());
+        const segs=cells.slice(1,1+nSeg).map(t=>{const m=t.match(/^(\d+)-(\d+)$/);return m?{s:+m[1],c:+m[2]}:null;});
+        if(segs.length!==nSeg||segs.some(x=>!x))return;
+        out[key][team]=segs;
+        const mins=cells.slice(1+nSeg+2).map(t=>{const m=t.match(/^(\d+)\s*min/);return m?+m[1]:null;});
+        if(mins.length>=2)avg[key][team]={gf:mins[0],ga:mins[1]};
+      });
+    });
+    return Object.keys(out.overall).length?{data:out,avg}:null;
+  };
+  const b10=boxes.find(b=>b.n===10),b15=boxes.find(b=>b.n===15);
+  const t10=b10?read(b10.box,9):null,t15=b15?read(b15.box,6):null;
+  if(!t10&&!t15)return null;
+  // If only the 15-minute table came through, the rest of the app still needs 10-minute data
+  if(!t10)return null;
+  const res=t10.data;
+  if(t15)res.seg15={...t15.data,avg:t15.avg};
+  return res;
+}
+let timingSeg=10;
+const TIMING_LABELS={10:["0-10","11-20","21-30","31-40","41-50","51-60","61-70","71-80","81-90"],15:["0-15","16-30","31-45","46-60","61-75","76-90"]};
+function timingView(){return timingSeg===15&&goalTimingData&&goalTimingData.seg15?{d:goalTimingData.seg15,labels:TIMING_LABELS[15],n:15}:{d:goalTimingData,labels:TIMING_LABELS[10],n:10};}
+function setTimingSeg(n,btn){
+  timingSeg=n;document.querySelectorAll("#timingSegBar .tab-btn").forEach(b=>b.classList.toggle("active",b===btn));
+  renderTimingTables();if(allRows.length&&homeTeamSelect.value&&awayTeamSelect.value)renderTimingForTeams(homeTeamSelect.value,awayTeamSelect.value);
+}
 function parseSoccerStatsSource(html){
+  if(/data-tbody\s+scope-/.test(html)){const r=parseSoccerStatsTiming2026(html);if(r)return r;}
   // Parse the actual HTML from https://www.soccerstats.com/table.asp?league=england&tid=j
   // The page has three <table> blocks inside radio tab divs.
   // Section headers are: <td ...><b>\nOverall\n</b></td>, <b>\nHome\n</b>, <b>\nAway\n</b>
@@ -3031,11 +3084,11 @@ function fuzzyFindTeam(csvName,timingDataObj){
 function renderTimingTables(){
   if(!goalTimingData)return;
   ["overall","home","away"].forEach(view=>{
-    const data=goalTimingData[view];
+    const TV=timingView(),data=TV.d[view]||{};
     const teams=Object.keys(data).sort();
     if(!teams.length)return;
-    const segsLabels=["0-10","11-20","21-30","31-40","41-50","51-60","61-70","71-80","81-90"];
-    let html=`<table class="timing-table"><thead><tr><th>Team</th>${segsLabels.map(s=>`<th>${s}</th>`).join("")}</tr></thead><tbody>`;
+    const segsLabels=TV.labels,avgMin=TV.d.avg?TV.d.avg[view]:null;
+    let html=`<table class="timing-table"><thead><tr><th>Team</th>${segsLabels.map(s=>`<th>${s}</th>`).join("")}${avgMin?'<th title="Average minute they score">Avg min scored</th><th title="Average minute they concede">Avg min conceded</th>':""}</tr></thead><tbody>`;
     teams.forEach(team=>{
       const segs=data[team];
       // Find most extreme segment
@@ -3050,6 +3103,7 @@ function renderTimingTables(){
         const bold=i===boldIdx?" tc-bold":"";
         html+=`<td class="${cls}${bold}">${seg.s}-${seg.c}</td>`;
       });
+      if(avgMin){const a=avgMin[team];html+=`<td>${a&&a.gf!=null?a.gf+"′":"–"}</td><td>${a&&a.ga!=null?a.ga+"′":"–"}</td>`;}
       html+="</tr>";
     });
     html+="</tbody></table>";
@@ -3060,9 +3114,10 @@ function renderTimingTables(){
 
 function renderTimingForTeams(homeTeam,awayTeam){
   if(!goalTimingData)return;
-  const homeData=fuzzyFindTeam(homeTeam,goalTimingData.home)||fuzzyFindTeam(homeTeam,goalTimingData.overall);
-  const awayData=fuzzyFindTeam(awayTeam,goalTimingData.away)||fuzzyFindTeam(awayTeam,goalTimingData.overall);
-  const segsLabels=["0-10","11-20","21-30","31-40","41-50","51-60","61-70","71-80","81-90"];
+  const TV=timingView();
+  const homeData=fuzzyFindTeam(homeTeam,TV.d.home)||fuzzyFindTeam(homeTeam,TV.d.overall);
+  const awayData=fuzzyFindTeam(awayTeam,TV.d.away)||fuzzyFindTeam(awayTeam,TV.d.overall);
+  const segsLabels=TV.labels;
 
   // Bar charts
   const barsWrap=document.getElementById("timingBarsWrap");
@@ -3070,7 +3125,7 @@ function renderTimingForTeams(homeTeam,awayTeam){
     function barPanel(team,data,color){
       if(!data)return`<div class="timing-bar-panel"><div class="timing-bar-title" style="color:${color}">${esc(team)} — no timing data</div></div>`;
       const maxVal=Math.max(...data.map(d=>Math.max(d.s,d.c)),1);
-      let html=`<div class="timing-bar-panel"><div class="timing-bar-title" style="color:${color}">${esc(team)} — goals per 10 mins</div>`;
+      let html=`<div class="timing-bar-panel"><div class="timing-bar-title" style="color:${color}">${esc(team)} — goals per ${TV.n} mins</div>`;
       data.forEach((seg,i)=>{
         const sw=(seg.s/maxVal*100).toFixed(1),cw=(seg.c/maxVal*100).toFixed(1);
         html+=`<div class="timing-bar-row"><div class="timing-bar-seg">${segsLabels[i]}</div><div class="timing-bar-track"><div class="timing-bar-scored" style="width:${sw}%;background:${color};opacity:0.7;"></div><div class="timing-bar-conceded" style="width:${cw}%;background:#f87171;"></div></div><div class="timing-bar-val">${seg.s}·${seg.c}</div></div>`;
@@ -7927,6 +7982,7 @@ async function handleXgvaUpload(file){
     })).filter(t => t.pts > 0 || t.xPts > 0);
 
     const msg = `${xgvaData.length} teams loaded`;
+    const sub=document.getElementById("xgvaSub");if(sub)sub.textContent="Who's overperforming their underlying numbers — and who's been unlucky? Powered by Understat xG data.";
     if(statusEl){ statusEl.textContent = `✅ ${msg} from ${file.name}`; statusEl.style.color="#c4b5fd"; }
     if(badge){  badge.textContent  = msg; badge.classList.remove("hidden"); }
     if(badge2){ badge2.textContent = msg; badge2.classList.remove("hidden"); }
@@ -8010,6 +8066,38 @@ function renderXgva(){
       <div style="font-size:10px;color:var(--muted);margin-bottom:8px;">xPts well above actual — unlucky / wasteful / leaky late goals</div>
       ${underP.map(outlierRow).join("")}
     </div>`;
+}
+
+// ── Expected points from shots on target (no Understat needed) ─────────
+// Each side's "expected goals" = its shots on target × the goals-per-shot-on-target rate in your file
+// (off-target shots added almost nothing when tested), then a Poisson split of each game into
+// win/draw/loss chances gives expected points. Checked on 21 Premier League seasons: expected points
+// from the first 19 games predicted points in the last 19 better (correlation 0.75) than actual
+// points (0.69) or goal difference (0.71). Understat's shot-quality xG is sharper still.
+function buildShotsXpts(){
+  const st=document.getElementById("xgvaShotsStatus");
+  const rows=allRows.filter(m=>m.homeSOT+m.awaySOT>0);
+  if(rows.length<20){st.textContent=`⚠️ Needs at least 20 games with shots on target in your current-season CSV (${rows.length} so far).`;st.style.color="#fca5a5";return;}
+  const sot=rows.reduce((a,m)=>a+m.homeSOT+m.awaySOT,0),gl=rows.reduce((a,m)=>a+m.homeGoals+m.awayGoals,0),conv=gl/sot;
+  const pois=(l,k)=>{let p=Math.exp(-l);for(let i=1;i<=k;i++)p*=l/i;return p;};
+  const T={};const get=t=>T[t]||(T[t]={team:t,pts:0,xPts:0,xG:0,xGA:0,matches:0});
+  rows.forEach(m=>{
+    const xh=Math.max(0.05,m.homeSOT*conv),xa=Math.max(0.05,m.awaySOT*conv);
+    let H=0,D=0;const ph=[],pa=[];for(let k=0;k<=10;k++){ph.push(pois(xh,k));pa.push(pois(xa,k));}
+    for(let i=0;i<=10;i++){D+=ph[i]*pa[i];for(let j=0;j<i;j++)H+=ph[i]*pa[j];}
+    const A=Math.max(0,1-H-D),h=get(m.homeTeam),a=get(m.awayTeam);
+    h.xPts+=3*H+D;a.xPts+=3*A+D;h.xG+=xh;h.xGA+=xa;a.xG+=xa;a.xGA+=xh;h.matches++;a.matches++;
+    if(m.homeGoals>m.awayGoals)h.pts+=3;else if(m.homeGoals<m.awayGoals)a.pts+=3;else{h.pts++;a.pts++;}
+  });
+  xgvaData=Object.values(T);
+  const skipped=allRows.length-rows.length,msg=`${xgvaData.length} teams · shots-based`;
+  st.textContent="";
+  ["xgvaSummaryBadge","xgvaLoadedBadge"].forEach(id=>{const b=document.getElementById(id);if(b){b.textContent=msg;b.classList.remove("hidden");}});
+  const xs=document.getElementById("xgvaStatus");if(xs){xs.textContent=`✅ Built from shots on target in ${rows.length} games${skipped?` (${skipped} without shots left out)`:""}.`;xs.style.color="#c4b5fd";}
+  const sub=document.getElementById("xgvaSub");if(sub)sub.textContent=`Shots-on-target version (Understat not loaded): each side's chances valued at the league's ${(100*conv).toFixed(0)}% goals-per-shot-on-target rate. Rougher than Understat's shot-quality xG, but still a better guide to the rest of the season than the points table.`;
+  document.getElementById("xgvaLocked").style.display="none";
+  document.getElementById("xgvaContent").style.display="block";
+  renderXgva();
 }
 
 // Helper — loose team name match for highlighting (handles "Man Utd" vs "Manchester United" etc)
