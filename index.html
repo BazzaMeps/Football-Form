@@ -744,6 +744,9 @@
     .plh-era-legend i{display:inline-block;width:14px;height:3px;border-radius:2px;vertical-align:middle;margin-right:5px;}
     .plh-era-legend i.dash{background:none!important;border-top:2px dashed;height:0;}
     .plh-era-chart svg{width:100%;height:auto;display:block;}
+    .elo-chips{display:flex;flex-wrap:wrap;gap:6px;margin:10px 0 4px;}
+    .elo-chip{font-size:12px;padding:4px 10px;border-radius:999px;border:1px solid var(--border);background:rgba(255,255,255,0.03);color:var(--muted);cursor:pointer;user-select:none;}
+    .elo-chip.on{color:var(--text);font-weight:700;border-color:currentColor;}
     .bt-prog{height:6px;border-radius:999px;background:var(--chart-grid);overflow:hidden;margin:10px 0;}
     .bt-prog.hidden{display:none;}
     .bt-prog>div{height:100%;width:0;background:var(--accent);transition:width .15s;}
@@ -1776,7 +1779,7 @@
       <!-- ── FORM MOMENTUM ── -->
       <div style="margin-top:18px;">
         <div class="card-title" style="margin-bottom:4px;">📈 Form momentum</div>
-        <div class="card-sub">Composite score: how the last five games compare with a baseline &mdash; the league average, blended with the team's own earlier games as they build up &mdash; plus clean sheet run and form. 0 = freefall · 50 = steady · 100 = unstoppable. Hover a bar for its numbers.</div>
+        <div class="card-sub">How good the last five games were against the league average (points, goals scored and conceded), plus clean sheet run and form: 0 = freefall · 50 = league average · 100 = unstoppable. The arrow underneath compares the last five with the team&rsquo;s own earlier games. Hover a bar or the arrow for its numbers. Worth knowing: across 22 seasons, the last five games say less about the next five than the whole season so far does.</div>
         <div class="momentum-wrap">
           <div class="momentum-card" id="momentumHome">
             <div class="momentum-label" id="momentumHomeLabel">Home team</div>
@@ -2225,6 +2228,40 @@
               <div class="timing-table-wrap"><table class="plh-table"><thead id="plhEraHead"></thead><tbody id="plhEraBody"></tbody></table></div>
             </details>
             <div class="plh-note" id="plhEraNote"></div>
+          </div>
+
+          <div class="first-goal-panel" style="margin-top:18px;" id="gtPanel">
+            <div class="card-title">&#x23F1;&#xFE0F; When clubs score</div>
+            <div class="card-sub">Every Premier League goal since 2004/05 by its exact minute, in 15-minute spells, for one club against the league average. Stoppage time counts as the 45th or 90th minute. Click a club in the table to chart it.</div>
+            <div class="plh-controls">
+              <label for="gtClub">Club:</label><select id="gtClub" onchange="gtRender()"></select>
+              <label for="gtSeasons">Seasons:</label><select id="gtSeasons" onchange="gtRender()"></select>
+              <label for="gtVenue">Games:</label><select id="gtVenue" onchange="gtRender()"><option value="all">Home &amp; away</option><option value="home">Home</option><option value="away">Away</option></select>
+            </div>
+            <div class="plh-stats" id="gtStats"></div>
+            <div class="plh-era-legend"><span><i style="background:var(--col-win);"></i>scored per game</span><span><i style="background:var(--col-away);"></i>conceded per game</span><span><i style="background:var(--text);height:2px;"></i>league average</span></div>
+            <div class="plh-era-chart" id="gtChart"></div>
+            <div class="plh-combo-box" id="gtVerdict"></div>
+            <div class="xc-h" style="margin-top:16px;display:flex;gap:8px;align-items:center;flex-wrap:wrap;">All clubs in these seasons
+              <select id="gtSort" onchange="gtRenderTable()" style="width:auto;padding:4px 8px;font-size:12px;text-transform:none;letter-spacing:0;">
+                <option value="late">sorted by share scored from 76&prime;</option><option value="lateA">sorted by share conceded from 76&prime;</option><option value="early">sorted by share scored in 0&ndash;15&prime;</option><option value="gf">sorted by goals per game</option></select></div>
+            <div class="timing-table-wrap" style="max-height:440px;overflow-y:auto;"><table class="plh-table" id="gtTable"></table></div>
+            <div class="plh-note" id="gtNote"></div>
+          </div>
+
+          <div class="first-goal-panel" style="margin-top:18px;" id="eloPanel">
+            <div class="card-title">&#x1F3C6; Elo through the eras</div>
+            <div class="card-sub">Each club&rsquo;s Elo rating before every Premier League game since 2004/05. Elo goes up when you beat teams and down when you lose, by more when the result is a surprise. Gaps are seasons outside the Premier League. Tick up to 8 clubs; hover a line for the date and rating.</div>
+            <div class="elo-chips" id="eloChips"></div>
+            <div class="plh-era-legend" id="eloLegend"></div>
+            <div class="plh-era-chart" id="eloChart"></div>
+            <div class="xc-grid">
+              <div><div class="xc-h">Strongest teams ever (peak Elo)</div><div class="timing-table-wrap"><table class="plh-table" id="eloPeaks"></table></div></div>
+              <div><div class="xc-h">Biggest upsets (winner rated lowest)</div><div class="timing-table-wrap"><table class="plh-table" id="eloUpsets"></table></div></div>
+            </div>
+            <div class="xc-h" style="margin-top:16px;">Highest-rated club at the end of each season, and who won the league</div>
+            <div class="timing-table-wrap"><table class="plh-table" id="eloSeasons"></table></div>
+            <div class="plh-note" id="eloNote"></div>
           </div>
 
           <div class="first-goal-panel" style="margin-top:18px;" id="bmPanel">
@@ -3698,6 +3735,13 @@ function renderRefPanel(){
 // 4. Clean sheet run                        — 10%
 // 5. W/D/L form string                      — 10%
 function calcMomentum(rows,team){
+  // v22: the SCORE is how good the last five games were against the league average; the TREND
+  // (shown separately) is how they compare with the team's own earlier games. Before, the score
+  // was the change from the team's own baseline, so a side that lost its first four and then went
+  // WWLLW scored "On fire" while a WWWLW side only had "Good momentum". Tested on 22 Premier League
+  // seasons (10,120 team-games): the last five alone predict the next five far worse than the whole
+  // season so far (R² 0.12 v 0.26), and add little on top of it, so the trend is shown as context,
+  // not scored.
   const allTeam=rows.filter(r=>r.homeTeam===team||r.awayTeam===team);
   if(allTeam.length<3)return null;
   const isH=m=>m.homeTeam===team;
@@ -3706,43 +3750,35 @@ function calcMomentum(rows,team){
   const ga=m=>isH(m)?m.awayGoals:m.homeGoals;
   const recent5=allTeam.slice(-5),earlier=allTeam.slice(0,-5);
   const recentPPG=mean(recent5.map(pts)),recentGF=mean(recent5.map(gf)),recentGA=mean(recent5.map(ga));
-
-  // Baseline = what "normal" looks like. It starts as the league average and blends in the
-  // team's own earlier games (everything before the last five) as they build up: none of it
-  // from 0-1 earlier games, up to half of it from 6. That stops a single early result deciding
-  // the score, and keeps some "how good is that really?" in the number all season long.
   let lgPts=0,lgGoals=0;
   rows.forEach(m=>{lgPts+=m.homeGoals===m.awayGoals?2:3;lgGoals+=m.homeGoals+m.awayGoals;});
-  const lgPPG=lgPts/(2*rows.length),lgGoalsPerTeam=lgGoals/(2*rows.length);
-  const w=0.5*Math.min(1,Math.max(0,(earlier.length-1)/5));
-  const blend=(own,lg)=>Math.max(0.3,w*own+(1-w)*lg);
-  const basePPG=blend(mean(earlier.map(pts)),lgPPG);
-  const baseGF=blend(mean(earlier.map(gf)),lgGoalsPerTeam);
-  const baseGA=blend(mean(earlier.map(ga)),lgGoalsPerTeam);
-  const basis=w===0?"league average — too few earlier games for a team baseline":Math.round(w*100)+"% this team's earlier games + "+(100-Math.round(w*100))+"% league average";
+  const lgPPG=lgPts/(2*rows.length),lgGF=lgGoals/(2*rows.length);
   const clamp=v=>Math.min(100,Math.max(0,v));
-
-  // Every component is centred so that "same as baseline" = 50 (0 = collapse, 100 = double the baseline)
-  const ppgComp=clamp(50*recentPPG/basePPG);
-  const gfComp=clamp(50*recentGF/baseGF);
-  const gaComp=clamp(50*(2-recentGA/baseGA));            // fewer conceded is better
-  // Clean sheet run: no run = neutral 50, 5 in a row = 100
+  // Every component: league average = 50, double the average = 100 (for conceded: none = 100)
+  const ppgComp=clamp(50*recentPPG/lgPPG);
+  const gfComp=clamp(50*recentGF/lgGF);
+  const gaComp=clamp(50*(2-recentGA/lgGF));
   let csRun=0;for(let i=allTeam.length-1;i>=0;i--){if(ga(allTeam[i])===0)csRun++;else break;}
   const csComp=Math.min(100,50+csRun*10);
-  // Form: points won in the last five as a share of the maximum (a level, not a change)
   const formPts=recent5.map(pts);
   const formComp=formPts.length?mean(formPts)/3*100:50;
-  // Weighted composite
   const score=ppgComp*0.35+gfComp*0.25+gaComp*0.20+csComp*0.10+formComp*0.10;
-  const verdict=score>=75?"🔥 On fire":score>=60?"📈 Good momentum":score>=45?"➡️ Steady":score>=30?"📉 Struggling":"❄️ Cold spell";
+  const verdict=score>=75?"🔥 On fire":score>=60?"📈 Good form":score>=45?"➡️ Steady":score>=30?"📉 Struggling":"❄️ Cold spell";
+  // Trend: last five v the team's own earlier games (needs 3+ earlier games)
+  let trend=null;
+  if(earlier.length>=3){
+    const d=recentPPG-mean(earlier.map(pts));
+    trend={d,earlierPPG:mean(earlier.map(pts)),n:earlier.length,
+      text:d>=0.9?"⬆️ Big improvement":d>=0.4?"↗️ Improving":d<=-0.9?"⬇️ Sharp drop-off":d<=-0.4?"↘️ Cooling":"↔️ In line with their season"};
+  }
   return{
-    score:Math.round(score),verdict,
+    score:Math.round(score),verdict,trend,
     components:[
-      {label:"Recent PPG",value:ppgComp,detail:`${recentPPG.toFixed(2)} pts/game`,tip:`Last 5: ${recentPPG.toFixed(2)} vs baseline ${basePPG.toFixed(2)} pts/game (${basis}). Half-full bar = same as baseline.`},
-      {label:"Goals scored",value:gfComp,detail:`${recentGF.toFixed(1)} avg (last 5)`,tip:`Last 5: ${recentGF.toFixed(2)} vs baseline ${baseGF.toFixed(2)} goals/game (${basis}). Half-full bar = same as baseline.`},
-      {label:"Goals conceded",value:gaComp,detail:`${recentGA.toFixed(1)} avg (last 5)`,tip:`Last 5: ${recentGA.toFixed(2)} vs baseline ${baseGA.toFixed(2)} goals/game (${basis}). Fewer is better; half-full bar = same as baseline.`},
+      {label:"Recent PPG",value:ppgComp,detail:`${recentPPG.toFixed(2)} pts/game`,tip:`Last 5: ${recentPPG.toFixed(2)} pts/game v league average ${lgPPG.toFixed(2)}. Half-full bar = league average.`},
+      {label:"Goals scored",value:gfComp,detail:`${recentGF.toFixed(1)} avg (last 5)`,tip:`Last 5: ${recentGF.toFixed(2)} goals/game v league average ${lgGF.toFixed(2)}. Half-full bar = league average.`},
+      {label:"Goals conceded",value:gaComp,detail:`${recentGA.toFixed(1)} avg (last 5)`,tip:`Last 5: ${recentGA.toFixed(2)} conceded/game v league average ${lgGF.toFixed(2)}. Fewer is better; half-full bar = league average.`},
       {label:"Clean sheet run",value:csComp,detail:`${csRun} in a row`,tip:"Half-full bar = no current run; fills up to full at 5 clean sheets in a row."},
-      {label:"Form (W/D/L)",value:formComp,detail:recent5.map(m=>pts(m)===3?"W":pts(m)===1?"D":"L").join(""),tip:"Points won in the last five as a share of the maximum 15 — a level, not a change."}
+      {label:"Form (W/D/L)",value:formComp,detail:recent5.map(m=>pts(m)===3?"W":pts(m)===1?"D":"L").join(""),tip:"Points won in the last five as a share of the maximum 15."}
     ]
   };
 }
@@ -3775,7 +3811,8 @@ function renderMomentum(homeTeam,awayTeam){
     const col=momentumColour(m.score);
     document.getElementById(scoreId).textContent=m.score;
     document.getElementById(scoreId).style.color=col;
-    document.getElementById(verdictId).textContent=m.verdict;
+    const vEl=document.getElementById(verdictId);
+    vEl.innerHTML=esc(m.verdict)+(m.trend?`<div style="font-size:11px;margin-top:2px;" title="Last 5: ${m.trend.d>=0?"+":""}${m.trend.d.toFixed(2)} pts/game on their earlier ${m.trend.n} games (${m.trend.earlierPPG.toFixed(2)}). Context only: recent form predicts less than the whole season does.">${esc(m.trend.text)}</div>`:"");
     renderMomentumDial(document.getElementById(dialId),m.score,col);
     document.getElementById(barsId).innerHTML=m.components.map(c=>`
       <div class="momentum-component" title="${esc(c.tip||"")}">
@@ -4419,7 +4456,7 @@ Clean sheets: ${homeStats.cleanSheets} (${homeStats.cleanSheetPct.toFixed(0)}%) 
 Scored in: ${homeStats.scoredPct.toFixed(0)}% of games | Avg corners: ${homeStats.avgCornersWon.toFixed(1)} | Avg yellows: ${homeStats.avgYellow.toFixed(1)}
 Recent form: ${homeStats.recentForm||"n/a"} | Trend: ${homeStats.trend}
 Overall season: ${homeOverall.wins}W ${homeOverall.draws}D ${homeOverall.losses}L | GD: ${homeOverall.goalDiff>0?"+":""}${homeOverall.goalDiff}
-${homeMom?`Form momentum score: ${homeMom.score}/100 — ${homeMom.verdict}`:""}
+${homeMom?`Form momentum score: ${homeMom.score}/100 — ${homeMom.verdict}${homeMom.trend?` (${homeMom.trend.text.replace(/^\S+\s/,"").toLowerCase()} on their earlier games)`:""}`:""}
 ${homeRdp?`Rescued points (home): CF=${homeRdp.cf}, WFB=${homeRdp.wfb}, DFB=${homeRdp.dfb}, LFB=${homeRdp.lfb}, PTS=${homeRdp.rescuedPts}`:""}
 ${homeRdp?`Dropped points (home): SF=${homeRdp.sf}, WFA=${homeRdp.wfa}, DFA=${homeRdp.dfa}, LFA=${homeRdp.lfa}, PTS dropped=${homeRdp.droppedPts}`:""}
 ${homeBH?`Both halves scored: ${(homeBH.scoredBoth/homeBH.played*100).toFixed(0)}% | Scored first: ${(homeBH.scoredFirst/homeBH.played*100).toFixed(0)}% | Lost after scoring first: ${homeBH.lostAfterFirst} games | Won after behind: ${homeBH.wonAfterBehind} games`:""}
@@ -4432,7 +4469,7 @@ Clean sheets: ${awayStats.cleanSheets} (${awayStats.cleanSheetPct.toFixed(0)}%) 
 Scored in: ${awayStats.scoredPct.toFixed(0)}% of games | Avg corners: ${awayStats.avgCornersWon.toFixed(1)} | Avg yellows: ${awayStats.avgYellow.toFixed(1)}
 Recent form: ${awayStats.recentForm||"n/a"} | Trend: ${awayStats.trend}
 Overall season: ${awayOverall.wins}W ${awayOverall.draws}D ${awayOverall.losses}L | GD: ${awayOverall.goalDiff>0?"+":""}${awayOverall.goalDiff}
-${awayMom?`Form momentum score: ${awayMom.score}/100 — ${awayMom.verdict}`:""}
+${awayMom?`Form momentum score: ${awayMom.score}/100 — ${awayMom.verdict}${awayMom.trend?` (${awayMom.trend.text.replace(/^\S+\s/,"").toLowerCase()} on their earlier games)`:""}`:""}
 ${awayRdp?`Rescued points (away): CF=${awayRdp.cf}, WFB=${awayRdp.wfb}, DFB=${awayRdp.dfb}, LFB=${awayRdp.lfb}, PTS=${awayRdp.rescuedPts}`:""}
 ${awayRdp?`Dropped points (away): SF=${awayRdp.sf}, WFA=${awayRdp.wfa}, DFA=${awayRdp.dfa}, LFA=${awayRdp.lfa}, PTS dropped=${awayRdp.droppedPts}`:""}
 ${awayBH?`Both halves scored: ${(awayBH.scoredBoth/awayBH.played*100).toFixed(0)}% | Scored first: ${(awayBH.scoredFirst/awayBH.played*100).toFixed(0)}% | Lost after scoring first: ${awayBH.lostAfterFirst} games | Won after behind: ${awayBH.wonAfterBehind} games`:""}
@@ -6389,6 +6426,8 @@ function plhAdopt(rows){
   plhEraInit();
   btInit();
   bmRender();
+  eloInit();
+  gtInit();
   plhRender();
 }
 async function plhOnFile(file){
@@ -6919,6 +6958,158 @@ function plhEraRender(){
   document.getElementById("plhEraNote").textContent=note.trim();
 }
 
+// ── When clubs score (goal timing by club) ───────────────────────────
+// Tested on the history file before building: a club's SHARE of goals scored after 75' barely
+// repeats from one season to the next (correlation 0.15 over 357 club-seasons), and the share
+// conceded late doesn't repeat at all (-0.06). Late goals PER GAME repeat more (0.41), but only
+// because good sides score more at every stage (total goals per game: 0.72). The panel says so.
+const GT_BANDS=["0–15","16–30","31–45","46–60","61–75","76–90"],gtBand=m=>Math.max(0,Math.min(5,Math.floor((m-1)/15)));
+function gtInit(){
+  const club=document.getElementById("gtClub"),sea=document.getElementById("gtSeasons"),pc=club.value,ps=sea.value;
+  const clubs=[...new Set(PLH.rows.flatMap(r=>[r.HomeTeam,r.AwayTeam]))].sort((a,b)=>plhName(a).localeCompare(plhName(b)));
+  club.innerHTML=clubs.map(c=>`<option value="${esc(c)}">${esc(plhName(c))}</option>`).join("");
+  const seas=PLH.seasons.slice().sort((a,b)=>b-a);
+  sea.innerHTML='<option value="all">All 22</option><option value="last5">Last 5</option>'+seas.map(se=>`<option value="${se}">${plhSeasonLabel(se)}</option>`).join("");
+  if(ps&&[...sea.options].some(o=>o.value===ps))sea.value=ps;
+  club.value=clubs.includes(pc)?pc:(clubs.includes("Man Utd")?"Man Utd":clubs[0]);
+  gtRender();
+}
+function gtScope(){
+  const v=document.getElementById("gtSeasons").value,seas=PLH.seasons.slice().sort((a,b)=>a-b);
+  return PLH.rows.filter(r=>plhHasMinutes(r)&&(v==="all"||(v==="last5"?seas.slice(-5).includes(r.Season):r.Season===+v)));
+}
+function gtTally(rows,club,venue){
+  const t={g:0,f:[0,0,0,0,0,0],a:[0,0,0,0,0,0],fm:0,am:0};
+  rows.forEach(r=>{
+    const home=r.HomeTeam===club,away=r.AwayTeam===club;
+    if(club&&!home&&!away)return;
+    const sides=club?[home?"h":"a"]:["h","a"];
+    sides.forEach(sd=>{
+      if(venue==="home"&&sd!=="h")return;if(venue==="away"&&sd!=="a")return;
+      const f=plhMinutes(sd==="h"?r.GoalMinutesHome:r.GoalMinutesAway),a=plhMinutes(sd==="h"?r.GoalMinutesAway:r.GoalMinutesHome);
+      t.g++;f.forEach(m=>{t.f[gtBand(m)]++;t.fm+=m;});a.forEach(m=>{t.a[gtBand(m)]++;t.am+=m;});
+    });
+  });
+  const sf=t.f.reduce((x,y)=>x+y,0),sa=t.a.reduce((x,y)=>x+y,0);
+  return Object.assign(t,{sf,sa,lateF:sf?t.f[5]/sf:null,lateA:sa?t.a[5]/sa:null,earlyF:sf?t.f[0]/sf:null,avgF:sf?t.fm/sf:null,avgA:sa?t.am/sa:null});
+}
+function gtRender(){
+  if(!PLH.loaded)return;
+  const club=document.getElementById("gtClub").value,venue=document.getElementById("gtVenue").value,rows=gtScope();
+  const C=gtTally(rows,club,venue),L=gtTally(rows,null,venue);   // league: every side in scope (per team-game)
+  const name=esc(plhName(club)),pc=x=>x==null?"–":(100*x).toFixed(0)+"%";
+  if(!C.g){document.getElementById("gtStats").innerHTML="";document.getElementById("gtChart").innerHTML=`<div class="plh-ex">${name} didn&rsquo;t play in these seasons.</div>`;document.getElementById("gtVerdict").innerHTML="";gtRenderTable();return;}
+  document.getElementById("gtStats").innerHTML=[
+    [C.g,"games"],[(C.sf/C.g).toFixed(2)+" / "+(C.sa/C.g).toFixed(2),"scored / conceded per game"],
+    [pc(C.lateF)+` <span style="font-size:12px;color:var(--muted);">v ${pc(L.lateF)}</span>`,"of their goals from 76′ (league)"],
+    [pc(C.lateA)+` <span style="font-size:12px;color:var(--muted);">v ${pc(L.lateA)}</span>`,"of goals conceded from 76′"],
+    [(C.avgF?Math.round(C.avgF)+"′":"–")+" / "+(C.avgA?Math.round(C.avgA)+"′":"–"),"average minute scored / conceded"]
+  ].map(([v,l])=>`<div class="plh-stat"><div class="v">${v}</div><div class="l">${l}</div></div>`).join("");
+  // mirrored bars: scored above the line, conceded below, league average per game as ticks
+  const pf=C.f.map(x=>x/C.g),pa=C.a.map(x=>x/C.g),lf=L.f.map(x=>x/L.g);
+  const top=Math.max(0.45,...pf,...pa,...lf)*1.12,W=760,H=300,pL=46,pR=12,pT=14,pB=30,mid=pT+(H-pT-pB)/2,half=(H-pT-pB)/2,bw=(W-pL-pR)/6;
+  const Yu=v=>mid-half*v/top,Yd=v=>mid+half*v/top;let g="";
+  [0.1,0.2,0.3,0.4,0.5,0.6].filter(v=>v<top).forEach(v=>{g+=`<line x1="${pL}" x2="${W-pR}" y1="${Yu(v).toFixed(1)}" y2="${Yu(v).toFixed(1)}" style="stroke:var(--chart-grid);"/><line x1="${pL}" x2="${W-pR}" y1="${Yd(v).toFixed(1)}" y2="${Yd(v).toFixed(1)}" style="stroke:var(--chart-grid);"/><text x="${pL-6}" y="${(Yu(v)+4).toFixed(1)}" text-anchor="end" style="font-size:10px;fill:var(--muted);">${v.toFixed(1)}</text><text x="${pL-6}" y="${(Yd(v)+4).toFixed(1)}" text-anchor="end" style="font-size:10px;fill:var(--muted);">${v.toFixed(1)}</text>`;});
+  g+=`<line x1="${pL}" x2="${W-pR}" y1="${mid}" y2="${mid}" style="stroke:var(--muted);"/>`;
+  GT_BANDS.forEach((b,i)=>{
+    const x=pL+bw*i+bw*0.2,w=bw*0.6,cx=x+w/2;
+    g+=`<rect x="${x.toFixed(1)}" y="${Yu(pf[i]).toFixed(1)}" width="${w.toFixed(1)}" height="${(mid-Yu(pf[i])).toFixed(1)}" rx="3" style="fill:var(--col-win);fill-opacity:.85;"><title>${name} scored ${C.f[i]} in ${b}′ (${pf[i].toFixed(2)} a game; league ${lf[i].toFixed(2)})</title></rect>`;
+    g+=`<rect x="${x.toFixed(1)}" y="${mid.toFixed(1)}" width="${w.toFixed(1)}" height="${(Yd(pa[i])-mid).toFixed(1)}" rx="3" style="fill:var(--col-away);fill-opacity:.85;"><title>${name} conceded ${C.a[i]} in ${b}′ (${pa[i].toFixed(2)} a game; league ${lf[i].toFixed(2)})</title></rect>`;
+    [Yu(lf[i]),Yd(lf[i])].forEach(y=>g+=`<line x1="${(x-4).toFixed(1)}" x2="${(x+w+4).toFixed(1)}" y1="${y.toFixed(1)}" y2="${y.toFixed(1)}" style="stroke:var(--text);stroke-width:2;"/>`);
+    g+=`<text x="${cx.toFixed(1)}" y="${H-8}" text-anchor="middle" style="font-size:11px;fill:var(--muted);">${b}′</text>`;
+  });
+  g+=`<text x="${W-pR}" y="${pT+10}" text-anchor="end" style="font-size:10.5px;fill:var(--muted);">scored ▲</text><text x="${W-pR}" y="${H-pB-4}" text-anchor="end" style="font-size:10.5px;fill:var(--muted);">conceded ▼</text>`;
+  document.getElementById("gtChart").innerHTML=`<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Goals by 15-minute spell">${g}</svg>`;
+  // verdict: biggest spell relative to the club's own average, both ways
+  const relF=pf.map((v,i)=>v/(lf[i]||1)),relA=pa.map((v,i)=>v/(lf[i]||1)),avgRF=C.sf/C.g/(L.sf/L.g),avgRA=C.sa/C.g/(L.sf/L.g);
+  const bestF=relF.map((v,i)=>[v/avgRF,i]).sort((a,b)=>b[0]-a[0])[0],worstA=relA.map((v,i)=>[v/avgRA,i]).sort((a,b)=>b[0]-a[0])[0];
+  let v=`${name} ${venue==="home"?"at home ":venue==="away"?"away ":""}score ${(C.sf/C.g).toFixed(2)} a game against a league average of ${(L.sf/L.g).toFixed(2)}. `;
+  if(bestF[0]>1.15&&C.sf>=20)v+=`Compared with their own scoring rate, their strongest spell is <b>${GT_BANDS[bestF[1]]}′</b> (${Math.round(100*(bestF[0]-1))}% above their usual pace). `;
+  if(worstA[0]>1.15&&C.sa>=20)v+=`They concede most, for them, in <b>${GT_BANDS[worstA[1]]}′</b>. `;
+  if(C.sf<40)v+=`With only ${C.sf} goals here, spells can swing a lot on a handful of goals.`;
+  document.getElementById("gtVerdict").innerHTML=`<div class="plh-ex" style="margin:0;">${v}</div>`;
+  gtRenderTable();
+}
+function gtRenderTable(){
+  const rows=gtScope(),venue=document.getElementById("gtVenue").value,sort=document.getElementById("gtSort").value,cur=document.getElementById("gtClub").value;
+  const clubs=[...new Set(rows.flatMap(r=>[r.HomeTeam,r.AwayTeam]))],nSeasons=new Set(rows.map(r=>r.Season)).size,minG=Math.min(19,Math.max(5,Math.round(nSeasons*19*0.5)));
+  const L=gtTally(rows,null,venue),list=clubs.map(c=>Object.assign({c},gtTally(rows,c,venue))).filter(x=>x.g>=minG&&x.sf>0);
+  const key={late:x=>x.lateF,lateA:x=>x.lateA,early:x=>x.earlyF,gf:x=>x.sf/x.g}[sort];list.sort((a,b)=>(key(b)??-1)-(key(a)??-1));
+  const pc=x=>x==null?"–":(100*x).toFixed(0)+"%",hi=(x,l)=>x!=null&&l!=null&&Math.abs(x-l)>0.05?`style="font-weight:800;"`:"";
+  document.getElementById("gtTable").innerHTML=`<thead><tr><th style="text-align:left;">Club</th><th>Games</th><th>Scored / game</th><th>Scored 0–15′</th><th>Scored 76′+</th><th>Conceded 76′+</th><th>Avg min scored</th></tr></thead><tbody>${
+    list.map(x=>`<tr style="cursor:pointer;${x.c===cur?"background:rgba(96,165,250,0.12);":""}" onclick="document.getElementById('gtClub').value=${JSON.stringify(x.c).replace(/"/g,"&quot;")};gtRender();"><td class="t">${esc(plhName(x.c))}</td><td>${x.g}</td><td>${(x.sf/x.g).toFixed(2)}</td><td ${hi(x.earlyF,L.earlyF)}>${pc(x.earlyF)}</td><td ${hi(x.lateF,L.lateF)}>${pc(x.lateF)}</td><td ${hi(x.lateA,L.lateA)}>${pc(x.lateA)}</td><td>${x.avgF?Math.round(x.avgF)+"′":"–"}</td></tr>`).join("")
+  }<tr style="color:var(--muted);"><td class="t">League</td><td></td><td>${(L.sf/L.g).toFixed(2)}</td><td>${pc(L.earlyF)}</td><td>${pc(L.lateF)}</td><td>${pc(L.lateA)}</td><td>${L.avgF?Math.round(L.avgF)+"′":"–"}</td></tr></tbody>`;
+  document.getElementById("gtNote").innerHTML=`Bold = more than 5 points from the league share. Clubs with fewer than ${minG} games in these seasons are left out. `+
+    `<b>Before reading too much into it:</b> tested across 357 club-seasons, the share of a club&rsquo;s goals that come after 75′ barely repeats from one season to the next (correlation 0.15), and the share it concedes late doesn&rsquo;t repeat at all. Good sides score more at every stage of the game, so a &ldquo;late goals&rdquo; reputation is mostly just goals, plus luck. The 76–90′ spell is the biggest for everyone (about 23% of all goals) because it includes stoppage time.`;
+}
+
+// ── Elo through the eras ─────────────────────────────────────────────
+// EloHome/EloAway in the history file are each club's rating going INTO the game (checked: the
+// next game's rating = this one + EloDiff, except after spells outside the Premier League, when
+// the rating has moved through games not in this file).
+const ELO_COLS=["#60a5fa","#f87171","#fbbf24","#34d399","#a78bfa","#f472b6","#22d3ee","#fb923c"];
+const ELO={sel:[]};
+function eloSeries(){
+  if(ELO.series)return ELO.series;
+  const by={};
+  PLH.rows.slice().sort((a,b)=>String(a.Date).localeCompare(String(b.Date))).forEach(r=>{
+    const d=String(r.Date).slice(0,10),t=Date.parse(d+"T12:00:00Z");
+    [[r.HomeTeam,+r.EloHome,+r.EloDiffHome],[r.AwayTeam,+r.EloAway,+r.EloDiffAway]].forEach(([c,e,df])=>{if(e>0)(by[c]||(by[c]=[])).push({t,d,e,df,s:r.Season,r});});
+  });
+  return ELO.series=by;
+}
+function eloInit(){
+  ELO.series=null;const S=eloSeries(),last=Math.max(...PLH.seasons);
+  if(!ELO.sel.length||ELO.sel.some(c=>!S[c])){
+    // default: the six highest-rated clubs going into their last game of the latest season
+    ELO.sel=Object.entries(S).filter(([c,a])=>a[a.length-1].s===last).map(([c,a])=>[c,a[a.length-1].e]).sort((x,y)=>y[1]-x[1]).slice(0,6).map(x=>x[0]);
+  }
+  eloRender();eloTables();
+}
+function eloToggle(c){const i=ELO.sel.indexOf(c);if(i>=0)ELO.sel.splice(i,1);else if(ELO.sel.length<8)ELO.sel.push(c);eloRender();}
+function eloRender(){
+  const S=eloSeries(),clubs=Object.keys(S).sort((a,b)=>plhName(a).localeCompare(plhName(b)));
+  const col=c=>ELO_COLS[ELO.sel.indexOf(c)%ELO_COLS.length];
+  document.getElementById("eloChips").innerHTML=clubs.map(c=>{const on=ELO.sel.includes(c);return`<span class="elo-chip${on?" on":""}" style="${on?"color:"+col(c):""}" onclick="eloToggle(${JSON.stringify(c).replace(/"/g,"&quot;")})">${esc(plhName(c))}</span>`;}).join("");
+  document.getElementById("eloLegend").innerHTML=ELO.sel.length>=8?'<span>8 clubs is the limit: untick one to add another.</span>':"";
+  const all=Object.values(S).flat(),t0=Math.min(...all.map(p=>p.t)),t1=Math.max(...all.map(p=>p.t));
+  const sel=ELO.sel.map(c=>S[c]).flat(),lo=Math.floor((Math.min(...(sel.length?sel:all).map(p=>p.e))-20)/100)*100,hi=Math.ceil((Math.max(...(sel.length?sel:all).map(p=>p.e))+20)/100)*100;
+  const W=760,H=320,pL=46,pR=16,pT=12,pB=30,iw=W-pL-pR,ih=H-pT-pB,X=t=>pL+iw*(t-t0)/(t1-t0),Y=e=>pT+ih*(hi-e)/(hi-lo);
+  let g="";
+  for(let e=lo;e<=hi;e+=100)g+=`<line x1="${pL}" x2="${W-pR}" y1="${Y(e).toFixed(1)}" y2="${Y(e).toFixed(1)}" style="stroke:var(--chart-grid);"/><text x="${pL-6}" y="${(Y(e)+4).toFixed(1)}" text-anchor="end" style="font-size:10.5px;fill:var(--muted);">${e}</text>`;
+  PLH.seasons.slice().sort((a,b)=>a-b).forEach((se,i)=>{if(i%3)return;const t=Date.parse((1999+se)+"-08-01T12:00:00Z");if(t<t0-864e5*60||t>t1)return;g+=`<line x1="${X(t).toFixed(1)}" x2="${X(t).toFixed(1)}" y1="${pT}" y2="${H-pB}" style="stroke:var(--chart-grid);stroke-dasharray:2 4;"/><text x="${X(t).toFixed(1)}" y="${H-pB+16}" text-anchor="middle" style="font-size:10.5px;fill:var(--muted);">${plhSeasonLabel(se).slice(2)}</text>`;});
+  ELO.sel.forEach(c=>{
+    const pts=S[c];let d="";pts.forEach((p,i)=>{const gap=i&&p.t-pts[i-1].t>864e5*100;d+=(i&&!gap?"L":"M")+X(p.t).toFixed(1)+" "+Y(p.e).toFixed(1)+" ";});
+    g+=`<path d="${d}" fill="none" style="stroke:${col(c)};stroke-width:1.8;" stroke-linejoin="round"><title>${esc(plhName(c))}</title></path>`;
+    // invisible hover dots, one per month, so the chart stays light
+    let lastM="";pts.forEach(p=>{const m=p.d.slice(0,7);if(m===lastM)return;lastM=m;g+=`<circle cx="${X(p.t).toFixed(1)}" cy="${Y(p.e).toFixed(1)}" r="5" style="fill:${col(c)};fill-opacity:0;"><title>${esc(plhName(c))} · ${p.d.split("-").reverse().join("/")}: ${p.e}</title></circle>`;});
+  });
+  document.getElementById("eloChart").innerHTML=`<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Elo ratings over time">${g}</svg>`;
+}
+function eloTables(){
+  const S=eloSeries(),n=x=>x.toLocaleString("en-GB"),dt=d=>d.split("-").reverse().join("/");
+  // peaks: each club's best rating, then the top 10 clubs by it
+  const peaks=Object.entries(S).map(([c,a])=>{const p=a.reduce((x,y)=>y.e>x.e?y:x);return{c,e:p.e,s:p.s,d:p.d};}).sort((x,y)=>y.e-x.e).slice(0,10);
+  document.getElementById("eloPeaks").innerHTML=`<thead><tr><th style="text-align:left;">Club</th><th>Peak</th><th>When</th></tr></thead><tbody>${peaks.map(p=>`<tr><td class="t">${esc(plhName(p.c))}</td><td>${n(p.e)}</td><td>${dt(p.d)} <span style="color:var(--muted);font-size:11px;">(${plhSeasonLabel(p.s)})</span></td></tr>`).join("")}</tbody>`;
+  const ups=PLH.rows.filter(r=>r.HomeGoals!==r.AwayGoals&&r.EloHome>0&&r.EloAway>0).map(r=>{const hw=r.HomeGoals>r.AwayGoals,gap=hw?r.EloAway-r.EloHome:r.EloHome-r.EloAway;return{r,hw,gap};}).filter(x=>x.gap>0).sort((a,b)=>b.gap-a.gap).slice(0,10);
+  document.getElementById("eloUpsets").innerHTML=`<thead><tr><th style="text-align:left;">Game</th><th>Score</th><th>Gap</th></tr></thead><tbody>${ups.map(x=>{const r=x.r;return`<tr><td class="t">${x.hw?"<b>"+esc(plhName(r.HomeTeam))+"</b>":esc(plhName(r.HomeTeam))} v ${x.hw?esc(plhName(r.AwayTeam)):"<b>"+esc(plhName(r.AwayTeam))+"</b>"}<br><span style="color:var(--muted);font-size:11px;">${dt(String(r.Date).slice(0,10))}</span></td><td>${r.HomeGoals}–${r.AwayGoals}</td><td>${x.gap}</td></tr>`;}).join("")}</tbody>`;
+  // end-of-season leader (rating after the last game) v table champion
+  const seas=PLH.seasons.slice().sort((a,b)=>b-a);let agree=0;
+  const rows=seas.map(se=>{
+    const fin={};Object.entries(S).forEach(([c,a])=>{const inS=a.filter(p=>p.s===se);if(inS.length){const l=inS[inS.length-1];fin[c]=l.e+(Number.isFinite(l.df)?l.df:0);}});
+    const top=Object.entries(fin).sort((x,y)=>y[1]-x[1])[0],champ=plhChampion(se),same=champ&&top&&champ===top[0];if(same)agree++;
+    return`<tr><td class="t">${plhSeasonLabel(se)}</td><td>${top?esc(plhName(top[0]))+` <span style="color:var(--muted);font-size:11px;">${n(top[1])}</span>`:"–"}</td><td class="${same?"bt-good":""}">${champ?esc(plhName(champ)):"–"}${same?" ✓":""}</td></tr>`;
+  }).join("");
+  document.getElementById("eloSeasons").innerHTML=`<thead><tr><th style="text-align:left;">Season</th><th>Highest Elo at the end</th><th>Champions</th></tr></thead><tbody>${rows}</tbody>`;
+  // how often the higher-rated side won
+  let gh=0,gn=0;PLH.rows.forEach(r=>{if(r.HomeGoals===r.AwayGoals||!(r.EloHome>0))return;gn++;gh+=(r.EloHome>r.EloAway)===(r.HomeGoals>r.AwayGoals);});
+  document.getElementById("eloNote").innerHTML=`In games that weren&rsquo;t drawn, the higher-rated side won ${(100*gh/gn).toFixed(0)}% of the time. The top-rated club at season&rsquo;s end matched the champions in ${agree} of ${seas.length} seasons. Ratings come from your history file (CGM Bet&rsquo;s Elo); their exact formula isn&rsquo;t published, so treat the numbers as relative strength rather than anything official. Top ratings also drift lower over the years in this file (champions finished around 2,200–2,300 in the 2000s, nearer 2,000 lately), so compare clubs within an era rather than across decades.`;
+}
+function plhChampion(se){
+  const pts={},gd={},gf={};PLH.rows.filter(r=>r.Season===se).forEach(r=>{[[r.HomeTeam,r.HomeGoals,r.AwayGoals],[r.AwayTeam,r.AwayGoals,r.HomeGoals]].forEach(([c,f,a])=>{pts[c]=(pts[c]||0)+(f>a?3:f===a?1:0);gd[c]=(gd[c]||0)+f-a;gf[c]=(gf[c]||0)+f;});});
+  return Object.keys(pts).sort((a,b)=>pts[b]-pts[a]||gd[b]-gd[a]||gf[b]-gf[a])[0]||null;
+}
+
 // ── Where the bookies get it wrong ───────────────────────────────────
 // Groups every price in the history file by odds band and compares the bookmaker's chance
 // (margin taken out) with how often it happened, plus the return from backing every one at £1.
@@ -7028,7 +7219,7 @@ function bmRenderMargin(rows){
   const by={};rows.forEach(r=>{const o=[bmOk(r.Odd1),bmOk(r.OddX),bmOk(r.Odd2)];if(o.some(x=>!x))return;(by[r.Season]||(by[r.Season]=[])).push(1/o[0]+1/o[1]+1/o[2]-1);});
   const seas=Object.keys(by).map(Number).sort((a,b)=>a-b);if(!seas.length){document.getElementById("bmMargin").innerHTML="";return;}
   const vals=seas.map(s=>by[s].reduce((a,b)=>a+b,0)/by[s].length);
-  const W=380,H=200,pL=40,pR=10,pT=12,pB=28,iw=W-pL-pR,ih=H-pT-pB,top=Math.ceil(Math.max(...vals)*100/2)*2/100,X=i=>pL+(seas.length>1?iw*i/(seas.length-1):iw/2),Y=v=>pT+ih*(1-v/top);
+  const W=380,H=200,pL=40,pR=22,pT=12,pB=28,iw=W-pL-pR,ih=H-pT-pB,top=Math.ceil(Math.max(...vals)*100/2)*2/100,X=i=>pL+(seas.length>1?iw*i/(seas.length-1):iw/2),Y=v=>pT+ih*(1-v/top);
   let g="";for(let v=0;v<=top+1e-9;v+=0.02)g+=`<line x1="${pL}" x2="${W-pR}" y1="${Y(v).toFixed(1)}" y2="${Y(v).toFixed(1)}" style="stroke:var(--chart-grid);"/><text x="${pL-5}" y="${(Y(v)+4).toFixed(1)}" text-anchor="end" style="font-size:10px;fill:var(--muted);">${Math.round(v*100)}%</text>`;
   seas.forEach((s,i)=>{if(i%3===0||i===seas.length-1)g+=`<text x="${X(i).toFixed(1)}" y="${H-8}" text-anchor="middle" style="font-size:10px;fill:var(--muted);">${plhSeasonLabel(s).slice(2)}</text>`;});
   g+=`<path d="${vals.map((v,i)=>(i?"L":"M")+X(i).toFixed(1)+" "+Y(v).toFixed(1)).join(" ")}" fill="none" style="stroke:var(--accent);stroke-width:2.2;"/>`+vals.map((v,i)=>`<circle cx="${X(i).toFixed(1)}" cy="${Y(v).toFixed(1)}" r="3" style="fill:var(--accent);"><title>${plhSeasonLabel(seas[i])}: ${(100*v).toFixed(1)}%</title></circle>`).join("");
