@@ -2227,6 +2227,39 @@
             <div class="plh-note" id="plhEraNote"></div>
           </div>
 
+          <div class="first-goal-panel" style="margin-top:18px;" id="bmPanel">
+            <div class="card-title">&#x1F4B7; Where the bookies get it wrong</div>
+            <div class="card-sub">Every price in your history file, grouped by odds: how often each group actually won, and what backing all of them at £1 would have returned. A coloured bar (its dotted whisker clear of zero) is beyond what luck explains; grey bars could be luck.</div>
+            <div class="plh-controls">
+              <label for="bmMarket">Backing:</label>
+              <select id="bmMarket" onchange="bmRender()">
+                <option value="all">Every result (home, draw, away)</option>
+                <option value="H">Home wins</option><option value="D">Draws</option><option value="A">Away wins</option>
+                <option value="fav">The favourite</option><option value="dog">The underdog</option>
+                <option value="o25">Over 2.5 goals</option><option value="u25">Under 2.5 goals</option>
+                <option value="gg">Both teams score</option><option value="ng">Not both to score</option>
+              </select>
+              <label for="bmSeasons">Seasons:</label>
+              <select id="bmSeasons" onchange="bmRender()"><option value="all">All</option><option value="14">2013/14 on (low-margin era)</option><option value="last5">Last 5</option></select>
+            </div>
+            <div class="plh-stats" id="bmStats"></div>
+            <div class="plh-combo-box" id="bmVerdict"></div>
+            <div class="plh-era-chart" id="bmChart"></div>
+            <div class="timing-table-wrap"><table class="plh-table" id="bmTable"></table></div>
+            <div class="xc-grid">
+              <div>
+                <div class="xc-h">Backing each club to win, every game</div>
+                <div class="timing-table-wrap" style="max-height:420px;overflow-y:auto;"><table class="plh-table" id="bmClubs"></table></div>
+              </div>
+              <div>
+                <div class="xc-h">The bookies&rsquo; cut, season by season</div>
+                <div class="plh-era-chart" id="bmMargin"></div>
+                <div class="plh-note" id="bmMarginNote"></div>
+              </div>
+            </div>
+            <div class="plh-note" id="bmNote"></div>
+          </div>
+
           <div class="first-goal-panel" style="margin-top:18px;" id="btPanel">
             <div class="card-title">&#x1F9EA; Model check</div>
             <div class="card-sub">Replays all 22 seasons through the Analysis tab&rsquo;s own prediction model. Every game is predicted using only the games before it that season, then scored against what happened and against the bookmakers&rsquo; odds in your history file.</div>
@@ -6355,6 +6388,7 @@ function plhAdopt(rows){
   plhOtdInit();
   plhEraInit();
   btInit();
+  bmRender();
   plhRender();
 }
 async function plhOnFile(file){
@@ -6883,6 +6917,123 @@ function plhEraRender(){
   if(club&&!def.club)note+="Club view counts every game "+plhName(club)+" played, both sides added together. ";
   if(club)note+="Seasons outside the Premier League are gaps.";
   document.getElementById("plhEraNote").textContent=note.trim();
+}
+
+// ── Where the bookies get it wrong ───────────────────────────────────
+// Groups every price in the history file by odds band and compares the bookmaker's chance
+// (margin taken out) with how often it happened, plus the return from backing every one at £1.
+// Error bars: 95% range for the average return per bet (±1.96 × sd/√n); a band is only called
+// out when the whole range sits on one side of zero.
+const BM_BANDS=[1.01,1.3,1.6,2,2.5,3.2,4.5,7,12,1000];
+const bmOk=v=>{const x=+v;return x>1.01&&x<1000?x:null;};
+function bmBets(rows,market){
+  const out=[];
+  rows.forEach(r=>{
+    const res=r.HomeGoals>r.AwayGoals?0:r.HomeGoals===r.AwayGoals?1:2,tot=r.HomeGoals+r.AwayGoals,gg=r.HomeGoals>0&&r.AwayGoals>0;
+    const add=(odds,fair,won,club)=>out.push({odds,fair,won,club,season:r.Season});
+    if(["all","H","D","A","fav","dog"].includes(market)){
+      const o=[bmOk(r.Odd1),bmOk(r.OddX),bmOk(r.Odd2)];if(o.some(x=>!x))return;
+      const q=o.map(x=>1/x),t=q[0]+q[1]+q[2],f=q.map(x=>x/t);
+      if(market==="all")[0,1,2].forEach(k=>add(o[k],f[k],res===k));
+      else if(market==="H")add(o[0],f[0],res===0,r.HomeTeam);
+      else if(market==="D")add(o[1],f[1],res===1);
+      else if(market==="A")add(o[2],f[2],res===2,r.AwayTeam);
+      else{if(o[0]===o[2])return;const fav=o[0]<o[2]?0:2,k=market==="fav"?fav:2-fav;add(o[k],f[k],res===k,k===0?r.HomeTeam:r.AwayTeam);}
+    }else if(market==="o25"||market==="u25"){
+      const ov=bmOk(r.OddO25),un=bmOk(r.OddU25);if(!ov||!un)return;const t=1/ov+1/un;
+      market==="o25"?add(ov,(1/ov)/t,tot>2):add(un,(1/un)/t,tot<3);
+    }else{
+      const y=bmOk(r.OddGG),n=bmOk(r.OddNG);if(!y||!n)return;const t=1/y+1/n;
+      market==="gg"?add(y,(1/y)/t,gg):add(n,(1/n)/t,!gg);
+    }
+  });
+  return out;
+}
+function bmSummary(B){
+  const n=B.length;if(!n)return null;
+  let w=0,sf=0,sr=0,sr2=0;B.forEach(b=>{const r=b.won?b.odds-1:-1;w+=b.won;sf+=b.fair;sr+=r;sr2+=r*r;});
+  const roi=sr/n,sd=Math.sqrt(Math.max(0,sr2/n-roi*roi)),ci=1.96*sd/Math.sqrt(n);
+  return{n,won:w/n,fair:sf/n,roi,ci,sig:roi-ci>0?1:roi+ci<0?-1:0};
+}
+const bmP=x=>`${x>=0?"+":"−"}${Math.abs(100*x).toFixed(1)}p`;
+function bmScopeRows(){
+  const v=document.getElementById("bmSeasons").value,seas=PLH.seasons.slice().sort((a,b)=>a-b);
+  return PLH.rows.filter(r=>v==="all"||(v==="14"?r.Season>=14:seas.slice(-5).includes(r.Season)));
+}
+function bmRender(){
+  if(!PLH.loaded||!document.getElementById("bmPanel"))return;
+  const market=document.getElementById("bmMarket").value,rows=bmScopeRows(),B=bmBets(rows,market),S=bmSummary(B);
+  const mName=document.getElementById("bmMarket").selectedOptions[0].textContent;
+  if(!S){["bmStats","bmChart","bmTable","bmClubs","bmVerdict"].forEach(id=>document.getElementById(id).innerHTML="");document.getElementById("bmVerdict").innerHTML='<div class="plh-ex" style="margin:0;">No odds for this market in these seasons.</div>';bmRenderMargin(rows);return;}
+  const seasonsWith=new Set(B.map(b=>b.season)).size;
+  document.getElementById("bmStats").innerHTML=[
+    [S.n.toLocaleString("en-GB"),"bets, "+seasonsWith+" season"+(seasonsWith===1?"":"s")],
+    [bmP(S.roi),"per £1 backing them all"],
+    [(100*S.fair).toFixed(1)+"%","bookies&rsquo; average chance"],
+    [(100*S.won).toFixed(1)+"%","how often they won"]
+  ].map(([v,l])=>`<div class="plh-stat"><div class="v">${v}</div><div class="l">${l}</div></div>`).join("");
+  const bands=[];for(let i=0;i<BM_BANDS.length-1;i++){const lo=BM_BANDS[i],hi=BM_BANDS[i+1],bb=B.filter(b=>b.odds>=lo&&b.odds<hi),x=bmSummary(bb);if(x&&x.n>=30)bands.push(Object.assign(x,{lo,hi,label:hi>=1000?`${lo}+`:`${lo.toFixed(2).replace(/0$/,"")}–${hi.toFixed(2).replace(/0$/,"")}`}));}
+  // verdict
+  const bad=bands.filter(b=>b.sig<0),good=bands.filter(b=>b.sig>0),short=bands.filter(b=>b.hi<=2),long=bands.filter(b=>b.lo>=4.5);
+  const avg=a=>a.length?a.reduce((x,b)=>x+b.roi*b.n,0)/a.reduce((x,b)=>x+b.n,0):null;
+  let v=`Backing <b>${esc(mName.toLowerCase())}</b> at every price: ${bmP(S.roi)} per £1${S.sig<0?", a loss bigger than luck explains":S.sig>0?", a profit bigger than luck explains":", within what luck explains"}. `;
+  const aS=avg(short),aL=avg(long);
+  if(aS!==null&&aL!==null&&aL<aS-0.03)v+=`Short prices (under 2.0) returned ${bmP(aS)}, long shots (4.5+) ${bmP(aL)}: the <b>favourite–longshot bias</b>. The bookies&rsquo; cut lands mostly on outsiders. `;
+  v+=good.length?`Profitable beyond luck: ${good.map(b=>b.label).join(", ")}. With this many bands, one could come up by chance, so treat it as a lead rather than a system.`:"No odds band made a profit beyond what luck explains.";
+  document.getElementById("bmVerdict").innerHTML=`<div class="plh-ex" style="margin:0;">${v}</div>`;
+  bmRenderChart(bands);
+  document.getElementById("bmTable").innerHTML=`<thead><tr><th style="text-align:left;">Odds</th><th>Bets</th><th>Bookies&rsquo; chance</th><th>Happened</th><th>Per £1</th><th>95% range</th></tr></thead><tbody>${
+    bands.map(b=>{const d=b.won-b.fair;return`<tr><td class="t">${b.label}</td><td>${b.n.toLocaleString("en-GB")}</td><td>${(100*b.fair).toFixed(1)}%</td><td class="${Math.abs(d)>0.01?(d>0?"bt-good":"bt-bad"):""}">${(100*b.won).toFixed(1)}%</td><td class="${b.sig>0?"bt-good":b.sig<0?"bt-bad":""}">${bmP(b.roi)}${b.sig?" ★":""}</td><td style="color:var(--muted);">${bmP(b.roi-b.ci)} to ${bmP(b.roi+b.ci)}</td></tr>`;}).join("")}</tbody>`;
+  bmRenderClubs(rows,market);bmRenderMargin(rows);
+  const notes={o25:"Over/under odds are missing for a few early games.",u25:"Over/under odds are missing for a few early games.",gg:"Both-teams-to-score odds only start in 2021/22.",ng:"Both-teams-to-score odds only start in 2021/22.",dog:"Underdog = the longer of the home and away prices.",fav:"Favourite = the shorter of the home and away prices."};
+  document.getElementById("bmNote").innerHTML=`★ = the whole 95% range is on one side of zero. Bookies&rsquo; chance has their margin taken out. The odds are the ones in your history file; which bookmaker, and whether they&rsquo;re closing prices, isn&rsquo;t recorded. `+(notes[market]||"");
+}
+function bmRenderChart(bands){
+  const el=document.getElementById("bmChart");if(!bands.length){el.innerHTML="";return;}
+  const W=760,H=270,pL=52,pR=12,pT=16,pB=42,iw=W-pL-pR,ih=H-pT-pB;
+  const lo=Math.min(-0.05,...bands.map(b=>b.roi-b.ci)),hi=Math.max(0.05,...bands.map(b=>b.roi+b.ci));
+  const step=(hi-lo)>0.6?0.2:(hi-lo)>0.25?0.1:0.05,a=Math.floor(lo/step)*step,bT=Math.ceil(hi/step)*step,Y=v=>pT+ih*(bT-v)/(bT-a);
+  const bw=iw/bands.length;let g="";
+  for(let v=a;v<=bT+step/2;v+=step)g+=`<line x1="${pL}" x2="${W-pR}" y1="${Y(v).toFixed(1)}" y2="${Y(v).toFixed(1)}" style="stroke:var(--chart-grid);${Math.abs(v)<1e-9?"stroke:var(--muted);":""}"/><text x="${pL-6}" y="${(Y(v)+4).toFixed(1)}" text-anchor="end" style="font-size:10.5px;fill:var(--muted);">${Math.round(100*v)}p</text>`;
+  bands.forEach((b,i)=>{
+    const x=pL+bw*i+bw*0.18,w=bw*0.64,y0=Y(0),y1=Y(b.roi),col=b.sig>0?"var(--col-win)":b.sig<0?"var(--col-away)":"var(--col-neutral)";
+    g+=`<rect x="${x.toFixed(1)}" y="${Math.min(y0,y1).toFixed(1)}" width="${w.toFixed(1)}" height="${Math.max(1,Math.abs(y1-y0)).toFixed(1)}" rx="3" style="fill:${col};fill-opacity:.85;"><title>Odds ${b.label}: ${bmP(b.roi)} per £1 over ${b.n.toLocaleString("en-GB")} bets (95% range ${bmP(b.roi-b.ci)} to ${bmP(b.roi+b.ci)})</title></rect>`;
+    const cx=x+w/2;g+=`<line x1="${cx.toFixed(1)}" x2="${cx.toFixed(1)}" y1="${Y(b.roi+b.ci).toFixed(1)}" y2="${Y(b.roi-b.ci).toFixed(1)}" style="stroke:var(--text);stroke-width:1.2;stroke-dasharray:2 2;opacity:.7;"/>`;
+    g+=`<text x="${cx.toFixed(1)}" y="${H-pB+15}" text-anchor="middle" style="font-size:10.5px;fill:var(--muted);">${b.label}</text><text x="${cx.toFixed(1)}" y="${H-pB+28}" text-anchor="middle" style="font-size:9.5px;fill:var(--muted);opacity:.8;">${b.n.toLocaleString("en-GB")}</text>`;
+  });
+  g+=`<text x="${pL+iw/2}" y="${H-2}" text-anchor="middle" style="font-size:11px;fill:var(--muted);">odds (number of bets underneath)</text>`;
+  el.innerHTML=`<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Return per pound by odds band">${g}</svg>`;
+}
+function bmRenderClubs(rows,market){
+  const el=document.getElementById("bmClubs"),clubMk=["H","A","fav","dog"].includes(market)?market:"win";
+  // club table always means "back this club to win": all its games, or only those in the chosen market
+  const by={};
+  rows.forEach(r=>{
+    const o=[bmOk(r.Odd1),bmOk(r.OddX),bmOk(r.Odd2)];if(o.some(x=>!x))return;
+    const res=r.HomeGoals>r.AwayGoals?0:r.HomeGoals===r.AwayGoals?1:2,q=o.map(x=>1/x),t=q[0]+q[1]+q[2];
+    [[r.HomeTeam,0],[r.AwayTeam,2]].forEach(([club,k])=>{
+      if(clubMk==="H"&&k!==0)return;if(clubMk==="A"&&k!==2)return;
+      if(clubMk==="fav"||clubMk==="dog"){if(o[0]===o[2])return;const fav=o[0]<o[2]?0:2;if((clubMk==="fav")!==(k===fav))return;}
+      (by[club]||(by[club]=[])).push({odds:o[k],fair:q[k]/t,won:res===k});
+    });
+  });
+  const minN=clubMk==="win"?76:38;
+  const list=Object.entries(by).map(([c,B])=>Object.assign({club:c},bmSummary(B))).filter(x=>x.n>=minN).sort((x,y)=>y.roi-x.roi);
+  const what={win:"every game",H:"at home",A:"away",fav:"as favourite",dog:"as underdog"}[clubMk];
+  el.innerHTML=`<thead><tr><th style="text-align:left;">Club (${what})</th><th>Bets</th><th>Won</th><th>Per £1</th></tr></thead><tbody>${list.map(x=>`<tr><td class="t">${esc(plhName(x.club))}</td><td>${x.n}</td><td>${(100*x.won).toFixed(0)}%</td><td class="${x.sig>0?"bt-good":x.sig<0?"bt-bad":""}">${bmP(x.roi)}${x.sig?" ★":""}</td></tr>`).join("")}</tbody>`;
+  const n=list.length,sig=list.filter(x=>x.sig>0).length;
+  el.closest(".xc-grid").querySelector(".xc-h").innerHTML=`Backing each club to win, ${what} <span style="text-transform:none;letter-spacing:0;font-weight:400;">(${n} clubs; by luck alone about ${Math.max(1,Math.round(n*0.025))} would show a ★ profit, ${sig} do)</span>`;
+}
+function bmRenderMargin(rows){
+  const by={};rows.forEach(r=>{const o=[bmOk(r.Odd1),bmOk(r.OddX),bmOk(r.Odd2)];if(o.some(x=>!x))return;(by[r.Season]||(by[r.Season]=[])).push(1/o[0]+1/o[1]+1/o[2]-1);});
+  const seas=Object.keys(by).map(Number).sort((a,b)=>a-b);if(!seas.length){document.getElementById("bmMargin").innerHTML="";return;}
+  const vals=seas.map(s=>by[s].reduce((a,b)=>a+b,0)/by[s].length);
+  const W=380,H=200,pL=40,pR=10,pT=12,pB=28,iw=W-pL-pR,ih=H-pT-pB,top=Math.ceil(Math.max(...vals)*100/2)*2/100,X=i=>pL+(seas.length>1?iw*i/(seas.length-1):iw/2),Y=v=>pT+ih*(1-v/top);
+  let g="";for(let v=0;v<=top+1e-9;v+=0.02)g+=`<line x1="${pL}" x2="${W-pR}" y1="${Y(v).toFixed(1)}" y2="${Y(v).toFixed(1)}" style="stroke:var(--chart-grid);"/><text x="${pL-5}" y="${(Y(v)+4).toFixed(1)}" text-anchor="end" style="font-size:10px;fill:var(--muted);">${Math.round(v*100)}%</text>`;
+  seas.forEach((s,i)=>{if(i%3===0||i===seas.length-1)g+=`<text x="${X(i).toFixed(1)}" y="${H-8}" text-anchor="middle" style="font-size:10px;fill:var(--muted);">${plhSeasonLabel(s).slice(2)}</text>`;});
+  g+=`<path d="${vals.map((v,i)=>(i?"L":"M")+X(i).toFixed(1)+" "+Y(v).toFixed(1)).join(" ")}" fill="none" style="stroke:var(--accent);stroke-width:2.2;"/>`+vals.map((v,i)=>`<circle cx="${X(i).toFixed(1)}" cy="${Y(v).toFixed(1)}" r="3" style="fill:var(--accent);"><title>${plhSeasonLabel(seas[i])}: ${(100*v).toFixed(1)}%</title></circle>`).join("");
+  document.getElementById("bmMargin").innerHTML=`<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Bookmaker margin by season">${g}</svg>`;
+  document.getElementById("bmMarginNote").textContent=`How much the home/draw/away prices add up to over 100%. ${plhSeasonLabel(seas[0])}: ${(100*vals[0]).toFixed(1)}%; ${plhSeasonLabel(seas[seas.length-1])}: ${(100*vals[vals.length-1]).toFixed(1)}%. ${vals[vals.length-1]<0.04?"A margin that thin usually means sharp, well-informed prices.":""}`;
 }
 
 // ── MODEL CHECK (backtest) ───────────────────────────────────────────
