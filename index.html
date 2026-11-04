@@ -1073,7 +1073,7 @@
         <div class="hist-upload-head">
           <div>
             <div class="hist-upload-title" style="color:#c4b5fd;">📊 xG data JSON (optional)</div>
-            <div class="hist-upload-sub">Understat league JSON — unlocks Expected vs Actual points panel. Export from understat.com/league/EPL. If Understat is down, the panel itself can build a shots-on-target version from your CSV.</div>
+            <div class="hist-upload-sub">Understat league JSON — unlocks Expected vs Actual points panel. Export from understat.com/league/EPL. Understat down? Use statz.ai below, or build a rougher shots-on-target version from your CSV.</div>
           </div>
           <span id="xgvaSummaryBadge" class="xgva-loaded-badge hidden"></span>
         </div>
@@ -1082,6 +1082,21 @@
           <span style="font-size:12px;color:var(--muted);">or</span>
           <button class="btn-fetch" type="button" onclick="buildShotsXpts()" title="No Understat? Build expected points from your CSV's shots on target">🎯 Use shots on target</button>
         </div>
+        <details id="statzWrap" style="margin-top:8px;">
+          <summary style="cursor:pointer;font-size:12px;color:#c4b5fd;font-weight:700;">📋 Or get real xG from statz.ai (works while Understat is down)</summary>
+          <div style="font-size:12px;color:var(--muted);margin:8px 0;line-height:1.7;">
+            <b>Quick way:</b> with your corsproxy key saved, click <b>Fetch</b>. <b>Manual way:</b> open <a id="statzLink" href="https://statz.ai/competitions/premier-league/xg" target="_blank" rel="noopener" style="color:#c4b5fd;">statz.ai's xG table</a>, press Ctrl+U, Ctrl+A, Ctrl+C, paste below and click Parse.
+          </div>
+          <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:8px;">
+            <label for="statzSlug" style="font-size:12px;color:var(--muted);">Competition:</label>
+            <input id="statzSlug" type="text" value="premier-league" class="fx-custom" style="flex:0 1 200px;min-width:140px;" oninput="statzLinkUpdate()" aria-label="statz.ai competition name" />
+            <button class="btn-fetch" type="button" id="statzFetchBtn" onclick="statzFetch()">🌐 Fetch</button>
+          </div>
+          <div style="display:flex;gap:8px;align-items:flex-start;">
+            <textarea id="statzPaste" placeholder="…or paste the statz.ai page source here" style="flex:1;height:60px;padding:8px 10px;border-radius:10px;border:1px solid var(--border);background:rgba(255,255,255,0.04);color:var(--text);font-size:12px;font-family:monospace;resize:vertical;"></textarea>
+            <button class="btn-fetch" type="button" onclick="statzParsePaste()">⚡ Parse</button>
+          </div>
+        </details>
         <div id="xgvaStatus" style="font-size:12px;color:var(--muted);margin-top:6px;"></div>
       </div>
 
@@ -1712,7 +1727,7 @@
               <input type="file" accept=".json" onchange="handleXgvaUpload(this.files[0])"> 
               📂 Load xG JSON
             </label>
-            <div style="margin-top:12px;font-size:12px;color:var(--muted);">Understat down, or no JSON? Build it from your CSV&rsquo;s shots on target instead:</div>
+            <div style="margin-top:12px;font-size:12px;color:var(--muted);">Understat down? Get real xG from statz.ai using the box under the <b>xG data</b> upload at the top, or build a rougher version from your CSV&rsquo;s shots on target:</div>
             <button class="btn-fetch" style="margin-top:6px;" onclick="buildShotsXpts()">🎯 Use shots on target</button>
             <div id="xgvaShotsStatus" style="font-size:12px;color:var(--muted);margin-top:6px;"></div>
           </div>
@@ -8104,11 +8119,76 @@ function buildShotsXpts(){
   renderXgva();
 }
 
+// ── statz.ai xG table (Sportmonks xG) ──────────────────────────────────
+// statz.ai serves its xG tables as plain HTML: four <table>s, each under an <h2> ending
+// "xG table" (whole season), "xG table, Home", "xG table, Away" or "xG table, Last 5".
+// Columns are found by their header names, so a reordered table still reads correctly.
+function parseStatzXg(html){
+  const doc=new DOMParser().parseFromString(html,"text/html"),out={};
+  doc.querySelectorAll("table").forEach(tb=>{
+    let h=tb.previousElementSibling;while(h&&!/^H[1-4]$/.test(h.tagName))h=h.previousElementSibling;
+    const title=h?h.textContent.replace(/\s+/g," ").trim():"";
+    if(!/xG table/i.test(title))return;
+    const view=/,\s*Home$/i.test(title)?"home":/,\s*Away$/i.test(title)?"away":/,\s*Last\s*5$/i.test(title)?"last5":"overall";
+    const heads=[...tb.querySelectorAll("thead th")].map(th=>th.textContent.replace(/\s+/g," ").trim().toLowerCase());
+    const col=n=>heads.indexOf(n);
+    const ix={team:col("team"),p:col("played"),g:col("goals"),xg:col("xg"),ga:col("goals against"),xga:col("xga"),pts:col("points"),xpts:col("xpts")};
+    if(ix.team<0||ix.xg<0||ix.xpts<0||ix.pts<0)return;
+    const num=t=>{const x=parseFloat(String(t).replace(/[^\d.+-]/g,""));return Number.isFinite(x)?x:0;};
+    const rows=[...tb.querySelectorAll("tbody tr")].map(tr=>{const c=[...tr.querySelectorAll("td,th")].map(td=>td.textContent.replace(/\s+/g," ").trim());
+      return c[ix.team]?{team:c[ix.team],matches:num(c[ix.p]),goals:num(c[ix.g]),xG:num(c[ix.xg]),goalsAgainst:num(c[ix.ga]),xGA:num(c[ix.xga]),pts:num(c[ix.pts]),xPts:num(c[ix.xpts])}:null;}).filter(Boolean);
+    if(rows.length&&!out[view])out[view]=rows;
+  });
+  return out.overall?out:null;
+}
+function statzLinkUpdate(){const slug=(document.getElementById("statzSlug").value||"premier-league").trim().replace(/[^a-z0-9-]/gi,"").toLowerCase();document.getElementById("statzLink").href=`https://statz.ai/competitions/${slug}/xg`;return slug;}
+function statzLoad(parsed,how){
+  xgvaData=parsed.overall.map(t=>({team:t.team,pts:t.pts,xPts:t.xPts,xG:t.xG,xGA:t.xGA,matches:t.matches}));
+  window.xgvaSplits=parsed;   // home / away / last5 kept for later use
+  const msg=`${xgvaData.length} teams · statz.ai`;
+  ["xgvaSummaryBadge","xgvaLoadedBadge"].forEach(id=>{const b=document.getElementById(id);if(b){b.textContent=msg;b.classList.remove("hidden");}});
+  const st=document.getElementById("xgvaStatus");if(st){st.textContent=`✅ xG table for ${xgvaData.length} teams loaded from statz.ai (${how}).`;st.style.color="#c4b5fd";}
+  const sub=document.getElementById("xgvaSub");if(sub)sub.textContent="Who's overperforming their underlying numbers — and who's been unlucky? xG and xPts from statz.ai (Sportmonks data).";
+  document.getElementById("xgvaLocked").style.display="none";document.getElementById("xgvaContent").style.display="block";
+  document.getElementById("statzWrap").open=false;
+  renderXgva();
+}
+function statzFail(msg){const st=document.getElementById("xgvaStatus");if(st){st.textContent="⚠️ "+msg;st.style.color="#fca5a5";}}
+function statzParsePaste(){
+  const ta=document.getElementById("statzPaste"),raw=ta.value.trim();
+  if(!raw)return statzFail("Nothing pasted yet.");
+  const parsed=parseStatzXg(raw);
+  if(!parsed)return statzFail("Couldn't find the xG table in that. Make sure it's the page source (Ctrl+U) of a statz.ai …/xg page.");
+  ta.value="";statzLoad(parsed,"pasted");
+}
+async function statzFetch(){
+  const slug=statzLinkUpdate(),key=fxStore.get(FX_KEY_STORAGE),btn=document.getElementById("statzFetchBtn");
+  if(!key)return statzFail("No corsproxy key saved yet. Add it with 🔑 in the fixtures box, or use the paste box.");
+  btn.disabled=true;const st=document.getElementById("xgvaStatus");if(st){st.textContent="Fetching from statz.ai…";st.style.color="var(--muted)";}
+  try{
+    const url="https://statz.ai/competitions/"+slug+"/xg";
+    const res=await fetch("https://corsproxy.io/?key="+encodeURIComponent(key)+"&url="+encodeURIComponent(url));
+    if(!res.ok)throw new Error(res.status===404?`statz.ai has no page called "${slug}"`:`HTTP ${res.status}`);
+    const parsed=parseStatzXg(await res.text());
+    if(!parsed)throw new Error("the page came back but had no xG table in it");
+    statzLoad(parsed,"fetched");
+  }catch(e){statzFail(`Couldn't fetch it (${e.message}). Use the paste box instead.`);}
+  finally{btn.disabled=false;}
+}
+
 // Helper — loose team name match for highlighting (handles "Man Utd" vs "Manchester United" etc)
 // Helper — uses the existing normTeamName + NAME_SUBS for reliable matching
+// Looser key for matching xG sites' full club names ("AFC Bournemouth", "Brighton & Hove Albion",
+// "West Ham United") to CSV short names. City/United only come off the end when nothing else would
+// then clash: Manchester City/United and Bristol City/Rovers are left alone.
+function xgTeamKey(n){
+  let k=normTeamName(n).replace(/^afc\s+/,"").replace(/(\s+united)+$/," united");
+  if(!/^(manchester|bristol)\b/.test(k))k=k.replace(/\s+(united|city|town|hove albion|hove)$/,"");
+  return k.trim();
+}
 function fuzzyMatchTeam(xgName, csvName){
   if(!xgName || !csvName) return false;
-  return normTeamName(xgName) === normTeamName(csvName);
+  return normTeamName(xgName) === normTeamName(csvName) || xgTeamKey(xgName) === xgTeamKey(csvName);
 }
 
 // Re-render xgva when teams change
