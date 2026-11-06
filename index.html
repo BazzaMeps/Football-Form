@@ -1318,7 +1318,7 @@
           <div class="clash-alert" id="tacticalClashAlert">
             <div class="clash-alert-head">
               <span class="clash-alert-icon">⚡</span>
-              <span class="clash-alert-title">Critical Match Window Identified</span>
+              <span class="clash-alert-title">Possible danger window</span>
             </div>
             <div class="clash-alert-sub" id="clashAlertSub"></div>
             <div class="clash-window-chips" id="clashWindowChips"></div>
@@ -3233,61 +3233,44 @@ function renderTimingForTeams(homeTeam,awayTeam){
     // Clash = both overlap (home concedes AND away scores heavily in same period)
     // Dual threshold: relative (>1.3x avg) AND absolute (>avg+0.75 goals) to avoid
     // false positives for low-conceding teams where 1 extra goal looks "dangerous"
-    const avgHomeConcede=mean(homeData.map(d=>d.c));
-    const avgAwayScore=mean(awayData.map(d=>d.s));
-    const homeConcedeThresh=Math.max(avgHomeConcede*1.3, avgHomeConcede+0.75);
-    const awayScoreThresh=Math.max(avgAwayScore*1.3, avgAwayScore+0.75);
+    // v22: a window is only flagged when it is genuinely unusual for THAT team, not just "more than
+    // their average". Expected goals in a window = the team's total × the share of all league goals
+    // that fall in that window (41-50 and 81-90 hold more because of stoppage time). Flagged when
+    // the team has 3+ goals there AND a Poisson check says that many would turn up by chance less
+    // than 5% of the time. The old rule flagged a single goal as "+350%".
+    // Also worth knowing (tested on 22 Premier League seasons): a club's share of goals in a given
+    // spell barely repeats from one season to the next, so even a real pattern is a weak guide.
+    const lgShare=(()=>{const tot=segsLabels.map(()=>0);Object.values(TV.d.overall||{}).forEach(arr=>arr.forEach((x,i)=>{tot[i]+=x.s;}));const S=tot.reduce((a,b)=>a+b,0);return S?tot.map(t=>t/S):segsLabels.map(()=>1/segsLabels.length);})();
+    const pAtLeast=(k,lam)=>{if(k<=0)return 1;let c=0,p=Math.exp(-lam);for(let i=0;i<k;i++){c+=p;p*=lam/(i+1);}return Math.max(0,1-c);};
+    const homeConcTot=homeData.reduce((a,d)=>a+d.c,0),awayScoreTot=awayData.reduce((a,d)=>a+d.s,0);
+    const judge=(obs,tot,i)=>{const exp=tot*lgShare[i],p=pAtLeast(obs,exp);return{obs,tot,exp,p,flag:obs>=3&&p<0.05};};
+    const H=homeData.map((d,i)=>judge(d.c,homeConcTot,i)),A=awayData.map((d,i)=>judge(d.s,awayScoreTot,i));
+    const tip=(team,what,x,lbl)=>`${team} ${what} ${x.obs} of ${x.tot} in ${lbl}′ (about ${x.exp.toFixed(1)} expected from the league pattern)${x.flag?" — unusually many":""}`;
     let dangerHtml=`<div class="danger-title">⚠️ Danger period analysis for ${esc(homeTeam)} (home) vs ${esc(awayTeam)} (away)</div>`;
     dangerHtml+=`<div class="danger-row"><div class="danger-label">${esc(homeTeam)} concedes</div><div class="danger-segments">`;
     homeData.forEach((seg,i)=>{
-      const isWeakHome=seg.c>homeConcedeThresh;
-      const isStrongAway=awayData[i].s>awayScoreThresh;
-      let cls="seg-ok",label=segsLabels[i];
-      if(isWeakHome&&isStrongAway)cls="seg-clash";
-      else if(isWeakHome)cls="seg-danger";
-      dangerHtml+=`<div class="seg-chip ${cls}" title="${esc(homeTeam)}: ${seg.s}-${seg.c}">${label}</div>`;
+      const cls=H[i].flag&&A[i].flag?"seg-clash":H[i].flag?"seg-danger":"seg-ok";
+      dangerHtml+=`<div class="seg-chip ${cls}" title="${esc(tip(homeTeam,"conceded",H[i],segsLabels[i]))}">${segsLabels[i]}</div>`;
     });
     dangerHtml+=`</div></div>`;
     dangerHtml+=`<div class="danger-row"><div class="danger-label">${esc(awayTeam)} scores</div><div class="danger-segments">`;
     awayData.forEach((seg,i)=>{
-      const isWeakHome=homeData[i].c>homeConcedeThresh;
-      const isStrongAway=seg.s>awayScoreThresh;
-      let cls="seg-ok";
-      if(isWeakHome&&isStrongAway)cls="seg-clash";
-      else if(isStrongAway)cls="seg-safe";
-      dangerHtml+=`<div class="seg-chip ${cls}" title="${esc(awayTeam)}: ${seg.s}-${seg.c}">${segsLabels[i]}</div>`;
+      const cls=H[i].flag&&A[i].flag?"seg-clash":A[i].flag?"seg-safe":"seg-ok";
+      dangerHtml+=`<div class="seg-chip ${cls}" title="${esc(tip(awayTeam,"scored",A[i],segsLabels[i]))}">${segsLabels[i]}</div>`;
     });
     dangerHtml+=`</div></div>`;
-    dangerHtml+=`<div style="font-size:11px;color:var(--muted);margin-top:8px;">🟡 Clash = both home weak & away strong in that window &nbsp;🔴 Home danger &nbsp;🟢 Away threat &nbsp;🔵 No concern</div>`;
+    const anyFlag=H.some(x=>x.flag)||A.some(x=>x.flag);
+    dangerHtml+=`<div style="font-size:11px;color:var(--muted);margin-top:8px;">🟡 Clash = both teams unusual in that window &nbsp;🔴 Home leaks unusually &nbsp;🟢 Away scores unusually &nbsp;🔵 Nothing beyond chance. A window lights up only with 3+ goals and under a 5% chance of that many by luck. Hover a chip for its numbers.${!anyFlag&&(homeConcTot<15||awayScoreTot<15)?` With ${homeConcTot} conceded and ${awayScoreTot} scored to go on, it&rsquo;s too early in the season for any window to stand out.`:""}</div>`;
     dangerSection.innerHTML=dangerHtml;dangerSection.classList.remove("hidden");
 
-    // ── Tactical Clash Window Alert (v13) ─────────────────────────────
-    // Fire a prominent alert when ≥1 window has both home conceding heavily
-    // AND away scoring heavily — and quantify the severity.
     const clashAlert=document.getElementById("tacticalClashAlert");
     if(clashAlert){
-      // Find all clash windows and score their severity
-      const clashWindows=segsLabels.map((label,i)=>{
-        const homeConcede=homeData[i].c;
-        const awayScore=awayData[i].s;
-        const homeExcess=avgHomeConcede>0?(homeConcede-avgHomeConcede)/avgHomeConcede:0;
-        const awayExcess=avgAwayScore>0?(awayScore-avgAwayScore)/avgAwayScore:0;
-        const isClash=homeConcede>homeConcedeThresh&&awayScore>awayScoreThresh;
-        const severity=(homeExcess+awayExcess)/2; // combined excess above avg
-        return{label,i,homeConcede,awayScore,homeExcess,awayExcess,isClash,severity};
-      }).filter(w=>w.isClash).sort((a,b)=>b.severity-a.severity);
-
+      const clashWindows=segsLabels.map((label,i)=>({label,h:H[i],a:A[i],p:H[i].p*A[i].p})).filter(w=>w.h.flag&&w.a.flag).sort((x,y)=>x.p-y.p);
       if(clashWindows.length>0){
-        const topClash=clashWindows[0];
-        const subEl=document.getElementById("clashAlertSub");
-        const chipsEl=document.getElementById("clashWindowChips");
-        const magEl=document.getElementById("clashMagnitude");
-
-        subEl.textContent=`${homeTeam} concedes ${((topClash.homeExcess)*100).toFixed(0)}% above their average in the ${topClash.label}' window, while ${awayTeam} score ${((topClash.awayExcess)*100).toFixed(0)}% above their average in the same period. This is a statistically significant overlap — ${awayTeam} are primed to exploit a known ${homeTeam} vulnerability.`;
-        chipsEl.innerHTML=clashWindows.map(w=>`<span class="clash-window-chip">⚡ ${w.label}' · H-concede +${(w.homeExcess*100).toFixed(0)}% · A-score +${(w.awayExcess*100).toFixed(0)}%</span>`).join("");
-        const totalSeverity=clashWindows.reduce((s,w)=>s+w.severity,0);
-        const severityLabel=totalSeverity>1.5?"🔴 HIGH RISK":totalSeverity>0.8?"🟠 MODERATE RISK":"🟡 LOW-MODERATE RISK";
-        magEl.textContent=`${severityLabel} · ${clashWindows.length} overlapping danger window${clashWindows.length>1?"s":""} identified · Combined severity index: ${totalSeverity.toFixed(2)}`;
+        const t=clashWindows[0];
+        document.getElementById("clashAlertSub").textContent=`${homeTeam} have conceded ${t.h.obs} of their ${t.h.tot} home goals against in the ${t.label}′ window (about ${t.h.exp.toFixed(1)} would be normal), and ${awayTeam} have scored ${t.a.obs} of their ${t.a.tot} away goals there (about ${t.a.exp.toFixed(1)} normal). Both are more than chance usually produces. Treat it as a curiosity, not a forecast: across 22 Premier League seasons, a club's goal-timing pattern barely carries over from one season to the next.`;
+        document.getElementById("clashWindowChips").innerHTML=clashWindows.map(w=>`<span class="clash-window-chip">⚡ ${w.label}′ · ${esc(homeTeam)} conceded ${w.h.obs} (≈${w.h.exp.toFixed(1)} normal) · ${esc(awayTeam)} scored ${w.a.obs} (≈${w.a.exp.toFixed(1)} normal)</span>`).join("");
+        document.getElementById("clashMagnitude").textContent=`${clashWindows.length} window${clashWindows.length>1?"s":""} where both are unusual · chance of each pattern by luck: under 5%`;
         clashAlert.classList.add("visible");
       }else{
         clashAlert.classList.remove("visible");
