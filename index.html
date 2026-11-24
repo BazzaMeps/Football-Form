@@ -2562,13 +2562,17 @@ function deriveResult(hg,ag){return hg>ag?"H":ag>hg?"A":"D";}
 function fmt(v){return Number(v||0).toFixed(2);}
 function pct(v){return`${Number(v||0).toFixed(1)}%`;}
 function formHtml(s){if(!s)return"—";return s.split(" ").map(l=>`<span class="form-letter form-${l}">${l}</span>`).join("");}
-function trendHtml(a){const c=a==="↑"?"trend-up":a==="↓"?"trend-down":"trend-flat";return`<span class="${c}">${a}</span>`;}
+function trendHtml(a){const c=a==="↑"?"trend-up":a==="↓"?"trend-down":"trend-flat";return`<span class="${c}" title="Points per game in the last 3 games against the 5 before them. ↑ = clearly better and winning more than losing; ↓ = clearly worse and mostly losing; → = no clear change.">${a}</span>`;}
 function mHtml(label,value,raw=false){return`<div class="metric"><div class="label">${esc(label)}</div><div class="value">${raw?value:esc(String(value))}</div></div>`;}
 function row(l,h,a){return`<tr><td>${esc(l)}</td><td>${esc(String(h))}</td><td>${esc(String(a))}</td></tr>`;}
 function srow(l,v){return`<tr><td>${esc(l)}</td><td>${esc(String(v))}</td></tr>`;}
+// isHomeVal: true/false for home-only or away-only lists, or a function m=>bool for mixed lists.
+// (v22 fix: the all-matches view passed plain true, so away games were scored from the home
+// side's point of view and an away defeat counted as a win, flipping the arrow.)
 function getFormTrend(matches,isHomeVal){
   if(matches.length<4)return"→";
-  const pts=m=>{const gf=isHomeVal?m.homeGoals:m.awayGoals,ga=isHomeVal?m.awayGoals:m.homeGoals;return gf>ga?3:gf===ga?1:0;};
+  const isH=typeof isHomeVal==="function"?isHomeVal:()=>isHomeVal;
+  const pts=m=>{const h=isH(m),gf=h?m.homeGoals:m.awayGoals,ga=h?m.awayGoals:m.homeGoals;return gf>ga?3:gf===ga?1:0;};
   const recent=matches.slice(-3).map(pts);
   const prior=matches.slice(-8,-3).map(pts);
   if(!prior.length)return"→";
@@ -2756,7 +2760,7 @@ function getTeamAllStats(rows,team,win,weighted=false){
     avgGoalsFor:avg(gf),avgGoalsAgainst:avg(ga),avgTotalGoals:avg(gf.map((v,i)=>v+ga[i])),
     avgShots:avg(sh),avgSOT:avg(st),avgCornersWon:avg(co),avgYellow:avg(ye),
     cleanSheets:cs,cleanSheetPct:played?cs/played*100:0,bttsPct:played?bttsC/played*100:0,scoredPct:played?scoredC/played*100:0,
-    trend:getFormTrend(ms,true),
+    trend:getFormTrend(ms,isH),
     recentForm:ms.slice(-5).map(m=>{const f=isH(m)?m.homeGoals:m.awayGoals,a=isH(m)?m.awayGoals:m.homeGoals;return f>a?"W":f<a?"L":"D";}).join(" ")};
 }
 function getOverallStats(rows,team){
