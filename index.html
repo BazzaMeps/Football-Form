@@ -871,7 +871,9 @@
     .xgva-locked-upload input{display:none;}
     /* Chart area */
     .xgva-chart-wrap{overflow-x:auto;}
-    .xgva-bar-row{display:grid;grid-template-columns:130px 1fr 54px;align-items:center;gap:8px;margin-bottom:5px;}
+    .xgva-bar-row{display:grid;grid-template-columns:165px 1fr 74px;align-items:center;gap:8px;margin-bottom:5px;}
+    .xgva-move{font-size:10px;font-weight:800;margin-left:4px;}
+    .xgva-move.up{color:var(--col-win);} .xgva-move.down{color:var(--col-away);} .xgva-move.same{color:var(--muted);font-weight:400;}
     .xgva-team-name{font-size:11px;font-weight:700;text-align:right;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:var(--text);}
     .xgva-team-name.hl-home{color:var(--col-home);}
     .xgva-team-name.hl-away{color:var(--col-away);}
@@ -1739,7 +1741,11 @@
             <div class="xgva-legend">
               <div class="xgva-legend-item"><div class="xgva-legend-dot" style="background:var(--col-home);"></div>Actual points</div>
               <div class="xgva-legend-item"><div class="xgva-legend-dot" style="background:var(--col-home);opacity:0.45;"></div>Expected points (xPts)</div>
-              <div class="xgva-legend-item" style="font-style:italic;">Sorted by actual league position</div>
+              <div class="xgva-legend-item" style="font-style:italic;" id="xgvaSortNote">Sorted by actual league position</div>
+            </div>
+            <div class="tab-bar" id="xgvaSortBar" style="margin-bottom:12px;">
+              <button class="tab-btn active" type="button" onclick="setXgvaSort('pts',this)">🏆 Actual table</button>
+              <button class="tab-btn" type="button" onclick="setXgvaSort('xpts',this)">📊 xPts table</button>
             </div>
             <div class="xgva-chart-wrap" id="xgvaChart"></div>
             <div class="xgva-outliers" id="xgvaOutliers"></div>
@@ -8345,13 +8351,25 @@ async function handleXgvaUpload(file){
   }
 }
 
+const ordinal=n=>n+(n%100>=11&&n%100<=13?"th":({1:"st",2:"nd",3:"rd"})[n%10]||"th");
+let xgvaSort="pts";
+function setXgvaSort(mode,btn){
+  xgvaSort=mode;
+  document.querySelectorAll("#xgvaSortBar .tab-btn").forEach(b=>b.classList.toggle("active",b===btn));
+  renderXgva();
+}
 function renderXgva(){
   if(!xgvaData) return;
   const homeTeam = homeTeamSelect?.value || "";
   const awayTeam = awayTeamSelect?.value || "";
 
-  // Sort by actual points desc (league position)
-  const sorted = [...xgvaData].sort((a,b) => b.pts - a.pts || b.xPts - a.xPts);
+  // Actual table: points, then xPts as a tie-break. xPts table: expected points, then actual points.
+  const byPts  = [...xgvaData].sort((a,b) => b.pts - a.pts || b.xPts - a.xPts);
+  const actualPos = new Map(byPts.map((t,i) => [t.team, i+1]));
+  const xMode  = xgvaSort === "xpts";
+  const sorted = xMode ? [...xgvaData].sort((a,b) => b.xPts - a.xPts || b.pts - a.pts) : byPts;
+  const note = document.getElementById("xgvaSortNote");
+  if(note) note.textContent = xMode ? "Sorted by expected points · ▲▼ = places above or below their real position" : "Sorted by actual league position";
   const maxPts = Math.max(...sorted.map(t => Math.max(t.pts, t.xPts))) * 1.04;
 
   // ── Bar chart ──────────────────────────────────────────────
@@ -8372,15 +8390,17 @@ function renderXgva(){
     const actualW = (t.pts  / maxPts * 100).toFixed(1);
     const xptsW   = (t.xPts / maxPts * 100).toFixed(1);
 
+    const realPos = actualPos.get(t.team), move = realPos - pos;
+    const moveHtml = !xMode ? "" : move > 0 ? `<span class="xgva-move up">▲${move}</span>` : move < 0 ? `<span class="xgva-move down">▼${-move}</span>` : `<span class="xgva-move same">=</span>`;
     chartHtml += `
-    <div class="xgva-bar-row" title="${t.team}: ${t.pts}pts actual · ${t.xPts.toFixed(1)}xPts · ${diffStr} diff">
-      <div class="xgva-team-name ${nameCls}">${pos}. ${esc(t.team)}${isHome?" 🔵":isAway?" 🔴":""}</div>
+    <div class="xgva-bar-row" title="${esc(t.team)}: ${t.pts} pts actual (${ordinal(realPos)}) · ${t.xPts.toFixed(1)} xPts${xMode?` (${ordinal(pos)} on xPts)`:""} · ${diffStr} difference">
+      <div class="xgva-team-name ${nameCls}">${pos}. ${esc(t.team)}${isHome?" 🔵":isAway?" 🔴":""}${moveHtml}</div>
       <div class="xgva-bars">
         <div class="xgva-bar-actual" style="width:${actualW}%;background:${actualCol};"></div>
         <div class="xgva-bar-xpts"   style="width:${xptsW}%;background:${xptsCol};"></div>
       </div>
       <div class="xgva-pts-label">
-        <span style="color:${actualCol};font-weight:800;">${t.pts}</span>
+        <span style="color:${actualCol};font-weight:800;">${xMode ? t.xPts.toFixed(1) : t.pts}</span>
         <span style="color:var(--muted);font-size:10px;"> / <span style="color:${diffCol};">${diffStr}</span></span>
       </div>
     </div>`;
