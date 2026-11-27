@@ -2316,7 +2316,7 @@
             </div>
             <div class="bt-prog hidden" id="btProg"><div id="btProgBar"></div></div>
             <div id="btOut" class="hidden">
-              <div class="xc-h" style="margin-top:6px;">Before and after the v21 fix</div>
+              <div class="xc-h" style="margin-top:6px;">Before and after the model fixes</div>
               <div class="timing-table-wrap"><table class="plh-table" id="btBA"></table></div>
               <div class="xc-h" style="margin-top:16px;">The current model in detail</div>
               <div class="plh-stats" id="btStats"></div>
@@ -3563,8 +3563,8 @@ function applyUnitedBias(ht,at,lh,la,inMonteCarlo=false){
 // Result (from each team's 3rd game at the venue): chance given to the actual result 33.6% -> 37.2%;
 // league-split guess 34.5%; bookmakers 38.4%.
 const MODEL_PRESETS={
-  current:{K:3,sotW:0.5,sot:"volume",label:"Current (v21)"},
-  v20:{K:0,sotW:0.4,sot:"conv",label:"Before the fix (v20)"}
+  current:{K:3,sotW:0.5,sot:"volume",hacW:0.07,hacCap:0.04,label:"Current (v23)"},
+  v20:{K:0,sotW:0.4,sot:"conv",hacW:0.3,hacCap:0.08,label:"Before the fixes (v20)"}
 };
 let MODEL_SET=MODEL_PRESETS.current;
 const modelBlend=(x,n)=>MODEL_SET.K>0?((n||0)*x+MODEL_SET.K)/((n||0)+MODEL_SET.K):x;
@@ -3614,10 +3614,14 @@ function buildPrediction(homeTeam,awayTeam,win){
   let la=calcXgLambda(away,league,league.awayGoals,league.awayGoals,home);
 
   // For decay/weighted modes we trust the weighted averages fully.
-  // For plain/DC modes, nudge lambdas slightly by HAC so home advantage
-  // is reflected more explicitly (capped to ±8% adjustment).
+  // For plain/DC modes, a small extra home nudge. The home/away split of the league averages already
+  // carries most of the home advantage, so this is only a top-up. v23: was (HAC-1)×0.3, capped at 8%,
+  // which for the Premier League always hit the 8% cap and, replayed over 22 seasons, over-predicted
+  // home wins by 3.1 points and under-predicted away wins by 2.4. (HAC-1)×0.07 (about 2.5% in the
+  // Premier League) brings both within half a point and scores slightly better overall.
   if(!weighted&&!decay&&hac!==1.0){
-    const hacAdj=Math.max(0.92,Math.min(1.08,(hac-1)*0.3+1));
+    const hw=MODEL_SET.hacW??0.07,hcap=MODEL_SET.hacCap??0.04;
+    const hacAdj=Math.max(1-hcap,Math.min(1+hcap,(hac-1)*hw+1));
     lh*=hacAdj;
     la/=hacAdj;
   }
